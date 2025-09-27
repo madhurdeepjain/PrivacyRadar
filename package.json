@@ -1,5 +1,5 @@
 {
-  "name": "privacyradar",
+  "name": "privacy-radar",
   "version": "1.0.0",
   "description": "PrivacyRadar - An Electron application for privacy monitoring",
   "main": "./out/main/index.js",
