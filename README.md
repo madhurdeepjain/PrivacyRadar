@@ -40,7 +40,7 @@ This project uses **better-sqlite3** with **Drizzle ORM** for local data storage
 ### Database Locations
 
 - **Development**: `dev-data/dev.db` (gitignored, safe for testing)
-- **Production**: User data directory (`app.getPath('userData')/data/privacy-radar.db`)
+- **Production**: User data directory (`app.getPath('userData')/data/app.db`)
 
 ### Schema Management
 
