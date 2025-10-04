@@ -1,5 +1,5 @@
 appId: com.privacyradar.app
-productName: PrivacyRadar
+productName: Privacy Radar
 directories:
   buildResources: build
 files:
@@ -9,10 +9,14 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!dev-data/*'
+extraResources:
+  - from: drizzle
+    to: drizzle
 asarUnpack:
   - resources/**
 win:
-  executableName: PrivacyRadar
+  executableName: Privacy Radar
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
@@ -37,7 +41,7 @@ linux:
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
-npmRebuild: false
+npmRebuild: true
 publish:
   provider: generic
   url: https://example.com/auto-updates
