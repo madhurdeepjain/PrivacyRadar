@@ -15,7 +15,7 @@ export function runMigrations(): void {
 
     migrate(db, { migrationsFolder: migrationsPath })
 
-    console.log('Migrations completed successfully')
+    // console.log('Migrations completed successfully')
 
     sqlite.close()
   } catch (error) {
