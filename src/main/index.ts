@@ -2,6 +2,8 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { getDatabase } from './db'
+import { runMigrations } from './db/migrate'
 
 function createWindow(): void {
   // Create the browser window.
@@ -48,6 +50,23 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  // Run database migrations first
+  try {
+    console.log('Running database migrations...')
+    runMigrations()
+    console.log('Migrations completed successfully')
+  } catch (error) {
+    console.error('Failed to run migrations:', error)
+  }
+
+  // Initialize database
+  try {
+    getDatabase()
+    console.log('Database initialized successfully')
+  } catch (error) {
+    console.error('Failed to initialize database:', error)
+  }
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
