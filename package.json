@@ -30,7 +30,11 @@
     "@electron-toolkit/utils": "^4.0.0",
     "better-sqlite3": "^12.4.1",
     "drizzle-orm": "^0.44.5",
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "@types/node-netstat": "^1.8.4",
+    "cap": "^0.2.1",
+    "node-netstat": "^1.9.0",
+    "ps-list": "^8.1.1"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
@@ -54,7 +58,8 @@
     "prettier": "^3.6.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "typescript": "^5.8.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
     "vite": "^7.0.5"
   }
 }

@@ -10,3 +10,4 @@ dev-data/
 *.db
 *.db-shm
 *.db-wal
+/src/test_output
