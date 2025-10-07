@@ -13,3 +13,8 @@ dev-data/
 *.db-wal
 
 *.tsbuildinfo
+
+# Test artifacts
+playwright-report/
+test-results/
+.playwright/

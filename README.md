@@ -20,6 +20,22 @@ $ npm install
 $ npm run dev
 ```
 
+### Testing
+
+```bash
+# Run unit tests (Vitest)
+$ npm run test:unit
+
+# Watch mode for unit tests
+$ npm run test:unit:watch
+
+# End-to-end smoke tests (Playwright)
+$ npx playwright install --with-deps   # first run only
+$ npm run test:e2e
+```
+
+Playwright spins up a renderer-only Vite dev server and injects stubbed Electron APIs, so the dashboard can be exercised in a real browser without capturing live packets. The suite targets Chromium only, mirroring the engine bundled with Electron.
+
 ### Build
 
 ```bash
