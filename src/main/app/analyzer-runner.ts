@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { DEV_DATA_PATH, PROC_CON_SNAPSHOT_INTERVAL_MS } from '@config/constants'
 import { logger } from '@infra/logging'
@@ -6,10 +6,12 @@ import { NetworkAnalyzer } from '@main/core/network/network-analyzer'
 import { PacketWriter } from '@main/core/network/packet-writer'
 import { getDeviceInfo } from '@shared/utils/device-info'
 import { setBestInterfaceInfo } from '@shared/utils/interface-utils'
+import { PacketMetadata } from '@shared/interfaces/common'
 
 let analyzer: NetworkAnalyzer | null = null
 let writer: PacketWriter | null = null
 let snapshotInterval: NodeJS.Timeout | null = null
+let mainWindow: BrowserWindow | null = null
 
 function setupPeriodicTasks(
   networkAnalyzer: NetworkAnalyzer,
@@ -25,6 +27,16 @@ function setupPeriodicTasks(
   snapshotInterval = setInterval(() => {
     packetWriter.writeProcConSnapshot(networkAnalyzer.getConnections())
   }, PROC_CON_SNAPSHOT_INTERVAL_MS)
+}
+
+function sendDataToFrontend(pkt: PacketMetadata): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('network-data', pkt)
+  }
+}
+
+export function setMainWindow(window: BrowserWindow): void {
+  mainWindow = window
 }
 
 export async function startAnalyzer(): Promise<void> {
@@ -51,9 +63,10 @@ export async function startAnalyzer(): Promise<void> {
     writer = null
   }
 
-  analyzer = new NetworkAnalyzer(deviceInfo.bestInterface.name, localIPs, (pkt) =>
+  analyzer = new NetworkAnalyzer(deviceInfo.bestInterface.name, localIPs, (pkt) => {
     writer?.writePacket(pkt)
-  )
+    sendDataToFrontend(pkt)
+  })
 
   try {
     await analyzer.start()

@@ -1,10 +1,10 @@
-import { app, ipcMain } from 'electron'
+import { app } from 'electron'
 import { electronApp } from '@electron-toolkit/utils'
 import { logger } from '@infra/logging'
 import { runMigrations } from '@infra/db/migrate'
 import { getDatabase } from '@infra/db'
 import { createMainWindow } from './window-manager'
-import { startAnalyzer, stopAnalyzer } from './analyzer-runner'
+import { startAnalyzer, stopAnalyzer, setMainWindow } from './analyzer-runner'
 import { registerAppLifecycleHandlers, registerProcessSignalHandlers } from './lifecycle'
 
 export async function startApp(): Promise<void> {
@@ -30,9 +30,8 @@ export async function startApp(): Promise<void> {
     logger.error('Failed to initialize database', error)
   }
 
-  createMainWindow()
-
-  ipcMain.on('ping', () => logger.debug('pong'))
+  const mainWindow = createMainWindow()
+  setMainWindow(mainWindow)
 
   try {
     await startAnalyzer()

@@ -49,9 +49,9 @@ export class ProcessTracker {
 
   getProcessName(pid: number): string | undefined {
     const name = this.procCache.get(pid)?.name
-    if (!name && pid !== 0) {
-      logger.debug(`PID ${pid} not found in cache (cache has ${this.procCache.size} entries)`)
-    }
+    // if (!name && pid !== 0) {
+    //   logger.debug(`PID ${pid} not found in cache (cache has ${this.procCache.size} entries)`)
+    // }
     return name
   }
 
