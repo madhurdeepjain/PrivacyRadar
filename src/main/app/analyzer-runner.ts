@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { DEV_DATA_PATH, PROC_CON_SNAPSHOT_INTERVAL_MS } from '@config/constants'
 import { logger } from '@infra/logging'
@@ -6,6 +6,7 @@ import { NetworkAnalyzer } from '@main/core/network/network-analyzer'
 import { PacketWriter } from '@main/core/network/packet-writer'
 import { getDeviceInfo } from '@shared/utils/device-info'
 import { setBestInterfaceInfo } from '@shared/utils/interface-utils'
+import { isDevelopment } from '@shared/utils/environment'
 import { PacketMetadata } from '@shared/interfaces/common'
 
 let analyzer: NetworkAnalyzer | null = null
@@ -56,7 +57,7 @@ export async function startAnalyzer(): Promise<void> {
     .flatMap((iface) => iface.addresses)
     .filter((addr) => addr && addr !== '0.0.0.0' && addr !== '::')
 
-  if (!app.isPackaged) {
+  if (isDevelopment()) {
     const basePath = join(DEV_DATA_PATH, 'packets')
     writer = new PacketWriter(basePath)
   } else {
