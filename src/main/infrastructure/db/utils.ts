@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { DEV_DATA_PATH } from '@main/config/constants'
+import { isDevelopment } from '@shared/utils/environment'
 
 export interface DatabasePaths {
   dbPath: string
@@ -9,9 +10,7 @@ export interface DatabasePaths {
 }
 
 export function getDatabasePaths(): DatabasePaths {
-  const isDev = !app.isPackaged
-
-  if (isDev) {
+  if (isDevelopment()) {
     const appPath = app.getAppPath()
 
     if (!existsSync(DEV_DATA_PATH)) {
