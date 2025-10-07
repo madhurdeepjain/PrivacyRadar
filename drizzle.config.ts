@@ -2,7 +2,7 @@ import type { Config } from 'drizzle-kit'
 import { join } from 'path'
 
 export default {
-  schema: './src/main/db/schema.ts',
+  schema: './src/main/infrastructure/db/schema.ts',
   out: './drizzle',
   dialect: 'sqlite',
   dbCredentials: {

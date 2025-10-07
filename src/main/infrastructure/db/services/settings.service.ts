@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { getDatabase, schema } from '../index'
 
 export class SettingsService {
-  private db = getDatabase()
+  private readonly db = getDatabase()
 
   async getSetting(key: string): Promise<string | null> {
     const result = await this.db

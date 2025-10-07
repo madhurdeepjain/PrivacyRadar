@@ -1,0 +1,618 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  color: #2d3748;
+  animation: fadeIn 0.6s ease-out;
+  height: 100%;
+  overflow: hidden;
+}
+
+.topBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+  padding: 20px 28px;
+  border-radius: 20px;
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  backdrop-filter: blur(20px);
+  animation: slideIn 0.5s ease-out;
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.brandMark {
+  height: 52px;
+  width: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 10px;
+  object-fit: contain;
+  box-shadow:
+    0 10px 25px rgba(102, 126, 234, 0.4),
+    0 0 0 4px rgba(102, 126, 234, 0.1);
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+  animation: float 3s ease-in-out infinite;
+}
+
+.brandMark:hover {
+  transform: scale(1.05) rotate(5deg);
+  box-shadow:
+    0 15px 35px rgba(102, 126, 234, 0.5),
+    0 0 0 4px rgba(102, 126, 234, 0.2);
+}
+
+.brandTitle {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.brandSubtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #718096;
+  font-weight: 500;
+}
+
+.liveBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  box-shadow:
+    0 4px 15px rgba(102, 126, 234, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.3) inset;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.liveDot {
+  display: inline-block;
+  height: 10px;
+  width: 10px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.metricStrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  animation: slideIn 0.6s ease-out 0.1s backwards;
+  flex-shrink: 0;
+}
+
+.metricCard {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.3) inset;
+  backdrop-filter: blur(20px);
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.metricCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.metricCard:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+}
+
+.metricCard:hover::before {
+  opacity: 1;
+}
+
+.metricLabel {
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #718096;
+  font-weight: 600;
+}
+
+.metricValue {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.metricHint {
+  font-size: 13px;
+  color: #a0aec0;
+  font-weight: 500;
+}
+
+.dashboardGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  animation: slideIn 0.7s ease-out 0.2s backwards;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.activityCard {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  padding: 24px;
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.3) inset;
+  backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.appsCard {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.9) 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  padding: 24px;
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.3) inset;
+  backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  color: #2d3748;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.cardSubtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #718096;
+  font-weight: 500;
+}
+
+.pill {
+  align-self: flex-start;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+  color: #667eea;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+}
+
+.appsPill {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+  color: #5a67d8;
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.emptyState {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #a0aec0;
+  font-size: 15px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.emptyIcon {
+  font-size: 64px;
+  opacity: 0.4;
+  animation: float 3s ease-in-out infinite;
+}
+
+.activityList {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 8px;
+  min-height: 0;
+  scroll-behavior: smooth;
+}
+
+.packetRow {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+  border: 2px solid rgba(203, 213, 224, 0.6);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: visible !important;
+  flex-shrink: 0;
+}
+
+.packetRow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 100%;
+  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.packetRow:hover {
+  border-color: rgba(102, 126, 234, 0.6);
+  transform: translateX(4px);
+  box-shadow: 0 10px 28px rgba(102, 126, 234, 0.2);
+  overflow: visible !important;
+}
+
+.packetRow:hover::before {
+  opacity: 1;
+}
+
+.packetRowNew {
+  border-color: rgba(102, 126, 234, 0.7);
+  box-shadow: 0 10px 28px rgba(102, 126, 234, 0.25);
+  animation: slideIn 0.3s ease-out;
+}
+
+.packetRowNew::before {
+  opacity: 1;
+}
+
+.packetRowHeader {
+  display: flex !important;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  width: 100%;
+}
+
+.packetIdentity {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.packetName {
+  font-size: 14px;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.packetMeta {
+  font-size: 11px;
+  color: #718096;
+  background: rgba(237, 242, 247, 0.9);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-weight: 600;
+  border: 1px solid rgba(203, 213, 224, 0.6);
+}
+
+.timestamp {
+  font-size: 11px;
+  color: #4a5568;
+  background: rgba(237, 242, 247, 0.9);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-weight: 600;
+  border: 1px solid rgba(203, 213, 224, 0.6);
+}
+
+.packetRoute {
+  display: flex !important;
+  visibility: visible !important;
+  align-items: center;
+  gap: 10px;
+  font-family: 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 11px;
+  color: #4a5568;
+  word-break: break-all;
+  font-weight: 500;
+  padding: 8px 12px;
+  background: rgba(237, 242, 247, 0.6);
+  border-radius: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.routeEndpoint {
+  flex: 1;
+  display: block;
+}
+
+.routeDivider {
+  color: #667eea;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.packetChips {
+  display: flex !important;
+  visibility: visible !important;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.protocolChip,
+.sizeChip {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 8px;
+  padding: 5px 10px;
+  flex-shrink: 0;
+}
+
+.protocolChip {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.18) 0%, rgba(118, 75, 162, 0.18) 100%);
+  color: #5a67d8;
+  border: 1px solid rgba(102, 126, 234, 0.35);
+}
+
+.sizeChip {
+  background: linear-gradient(135deg, rgba(56, 178, 172, 0.18) 0%, rgba(129, 230, 217, 0.18) 100%);
+  color: #319795;
+  border: 1px solid rgba(56, 178, 172, 0.35);
+}
+
+.appsList {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 8px;
+  min-height: 0;
+}
+
+.appRow {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+  border: 2px solid rgba(203, 213, 224, 0.6);
+  border-radius: 16px;
+  padding: 18px 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  flex-shrink: 0;
+}
+
+.appRow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.appRow:hover {
+  border-color: rgba(102, 126, 234, 0.5);
+  box-shadow: 0 12px 32px rgba(102, 126, 234, 0.2);
+  transform: translateY(-4px);
+}
+
+.appRow:hover::before {
+  opacity: 1;
+}
+
+.appIdentity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.appRank {
+  height: 44px;
+  width: 44px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  flex-shrink: 0;
+}
+
+.appName {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 4px;
+}
+
+.appMeta {
+  display: block;
+  font-size: 13px;
+  color: #718096;
+  font-weight: 600;
+}
+
+.appMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  padding-top: 16px;
+  border-top: 2px solid rgba(226, 232, 240, 0.8);
+  position: relative;
+  z-index: 1;
+}
+
+.appMetrics > div {
+  text-align: center;
+  padding: 12px;
+  background: linear-gradient(135deg, rgba(237, 242, 247, 0.5) 0%, rgba(247, 250, 252, 0.5) 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.appMetricValue {
+  display: block;
+  font-size: 20px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 4px;
+}
+
+.appMetricCaption {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #a0aec0;
+  font-weight: 700;
+}
+
+.footer {
+  display: flex;
+  justify-content: center;
+}
+
+@media (max-width: 960px) {
+  .dashboardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .appsCard,
+  .activityCard {
+    min-height: unset;
+  }
+
+  .appMetrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .topBar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .metricCard {
+    padding: 20px;
+  }
+
+  .appRow {
+    padding: 20px;
+  }
+
+  .appMetrics {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}

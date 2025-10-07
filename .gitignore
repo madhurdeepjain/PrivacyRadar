@@ -5,8 +5,11 @@ out
 .eslintcache
 *.log*
 *.bat*
+
 # Development database and data
 dev-data/
 *.db
 *.db-shm
 *.db-wal
+
+*.tsbuildinfo
