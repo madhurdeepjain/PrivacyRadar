@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { API } from './index.d'
+import type { API } from './preload'
 import type { PacketMetadata } from '../main/shared/interfaces/common'
 
 // Custom APIs for renderer
