@@ -21,7 +21,8 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -39,7 +40,8 @@
 }
 
 @keyframes float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0px);
   }
   50% {
@@ -83,7 +85,6 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, #5568d3 0%, #6a428f 100%);
 }
-
 
 code {
   font-weight: 600;
@@ -150,7 +151,6 @@ code {
     border: none;
   }
 }
-
 
 @media (max-width: 620px) {
   .versions {
