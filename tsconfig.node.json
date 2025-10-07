@@ -6,6 +6,15 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
-    "types": ["electron-vite/node"]
+    "types": ["electron-vite/node"],
+    "baseUrl": ".",
+    "paths": {
+      "@main/*": ["src/main/*"],
+      "@app/*": ["src/main/app/*"],
+      "@core/*": ["src/main/core/*"],
+      "@infra/*": ["src/main/infrastructure/*"],
+      "@config/*": ["src/main/config/*"],
+      "@shared/*": ["src/main/shared/*"]
+    }
   }
 }

@@ -1,13 +1,13 @@
+import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
-import Database from 'better-sqlite3'
+import { logger } from '@infra/logging'
 import { getDatabasePaths } from './utils'
 
 export function runMigrations(): void {
   const { dbPath, migrationsPath } = getDatabasePaths()
 
-  console.log(`Running migrations from: ${migrationsPath}`)
-  console.log(`Target database: ${dbPath}`)
+  logger.info('Running migrations', { dbPath, migrationsPath })
 
   try {
     const sqlite = new Database(dbPath)
@@ -15,11 +15,9 @@ export function runMigrations(): void {
 
     migrate(db, { migrationsFolder: migrationsPath })
 
-    // console.log('Migrations completed successfully')
-
     sqlite.close()
   } catch (error) {
-    console.error('Migration failed:', error)
+    logger.error('Migration failed', error)
     throw error
   }
 }

@@ -1,5 +1,6 @@
-import { drizzle, BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import Database from 'better-sqlite3'
+import { drizzle, BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
+import { logger } from '@infra/logging'
 import * as schema from './schema'
 import { getDatabasePaths } from './utils'
 
@@ -11,19 +12,15 @@ export function getDatabase(): BetterSQLite3Database<typeof schema> {
   }
 
   const { dbPath } = getDatabasePaths()
-
-  console.log(`Database path: ${dbPath}`)
+  logger.info('Opening database', { dbPath })
 
   const sqlite = new Database(dbPath)
-  sqlite.pragma('journal_mode = WAL') // Enable WAL mode for better concurrency
+  sqlite.pragma('journal_mode = WAL')
 
-  // Initialize Drizzle ORM
   db = drizzle(sqlite, { schema })
 
   return db
 }
 
 export { schema }
-
-// Re-export services for easy imports
 export * from './services/settings.service'

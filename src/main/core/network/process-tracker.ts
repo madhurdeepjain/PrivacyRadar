@@ -1,22 +1,31 @@
-import { ProcDetails } from '../interfaces/common'
-import psList from 'ps-list'
+import psList, { ProcessDescriptor } from 'ps-list'
+import { PROCESS_POLL_INTERVAL_MS } from '@config/constants'
+import { logger } from '@infra/logging'
+import { ProcDetails } from '@shared/interfaces/common'
 
-/*
-  Uses ps-list to return info about all running processes.
-  Most of them are not connected with the internet, but there
-  is no way for us to tell using ps-list alone.
-  maintains a map where key = pid, value = name, cpu, mem, etc
-*/
-
+/**
+ * Maintains a cache of running processes sourced from ps-list.
+ */
 export class ProcessTracker {
-  private procCache = new Map<number, ProcDetails>()
+  private readonly procCache = new Map<number, ProcDetails>()
   private pollingTimer: NodeJS.Timeout | null = null
 
   async refreshProcesses(): Promise<void> {
     try {
-      const psListFunction = typeof psList === 'function' ? psList : (psList as any).default
+      type PsListFn = () => Promise<ProcessDescriptor[]>
 
-      if (!psListFunction || typeof psListFunction !== 'function') {
+      let psListFunction: PsListFn | undefined
+
+      if (typeof psList === 'function') {
+        psListFunction = psList as PsListFn
+      } else {
+        const candidate = (psList as unknown as { default?: unknown }).default
+        if (typeof candidate === 'function') {
+          psListFunction = candidate as PsListFn
+        }
+      }
+
+      if (!psListFunction) {
         throw new Error('ps-list module did not export a valid function')
       }
 
@@ -33,16 +42,15 @@ export class ProcessTracker {
           ppid: process.ppid
         })
       }
-
     } catch (error) {
-      console.error('Failed to refresh process cache:', error)
+      logger.error('Failed to refresh process cache:', error)
     }
   }
 
   getProcessName(pid: number): string | undefined {
     const name = this.procCache.get(pid)?.name
     if (!name && pid !== 0) {
-      console.log(`DEBUG: PID ${pid} not found in cache (cache has ${this.procCache.size} entries)`)
+      logger.debug(`PID ${pid} not found in cache (cache has ${this.procCache.size} entries)`)
     }
     return name
   }
@@ -50,9 +58,8 @@ export class ProcessTracker {
   getProcDetails(pid: number): ProcDetails | undefined {
     return this.procCache.get(pid)
   }
-  
-  //1 second refresh rate
-  async startPolling(interval: number = 1000): Promise<void> {
+
+  async startPolling(interval: number = PROCESS_POLL_INTERVAL_MS): Promise<void> {
     await this.refreshProcesses()
     if (this.pollingTimer) clearInterval(this.pollingTimer)
     this.pollingTimer = setInterval(() => this.refreshProcesses(), interval)

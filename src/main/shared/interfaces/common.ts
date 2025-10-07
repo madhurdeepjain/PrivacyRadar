@@ -21,7 +21,6 @@ export interface ProcDetails {
 }
 
 export interface PacketMetadata {
-  //quick access fields
   pid?: number
   procName?: string
   size: number
@@ -33,8 +32,6 @@ export interface PacketMetadata {
   timestamp: number
   srcPortService?: string
   dstPortService?: string
-  
-  //full decoded headers
   ethernet: EthernetFrame
   ipv4?: IPv4Header
   ipv6?: IPv6Header
@@ -61,14 +58,13 @@ export interface UDPPortMapping {
   pid?: number
   procName: string
   lastSeen: number
-  isListener: boolean //true for listeners, false for ephemeral/outgoing
+  isListener: boolean
 }
 
-//decoded-headers
 export interface EthernetFrame {
   srcmac: string
   dstmac: string
-  type: number  //EtherType
+  type: number
 }
 
 export interface IPv4Header {

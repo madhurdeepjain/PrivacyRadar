@@ -44,7 +44,7 @@ This project uses **better-sqlite3** with **Drizzle ORM** for local data storage
 
 ### Schema Management
 
-Database schema is defined in `src/main/db/schema.ts`. The initial schema includes:
+Database schema is defined in `src/main/infrastructure/db/schema.ts`. The initial schema includes:
 
 - `settings` table for application configuration
 
@@ -54,7 +54,7 @@ Migrations are managed using Drizzle Kit and are automatically applied on applic
 
 #### Creating Migrations
 
-After modifying the schema in `src/main/db/schema.ts`:
+After modifying the schema in `src/main/infrastructure/db/schema.ts`:
 
 ```bash
 # Generate a new migration
