@@ -8,6 +8,7 @@ import { getDeviceInfo } from '@shared/utils/device-info'
 import { setBestInterfaceInfo } from '@shared/utils/interface-utils'
 import { isDevelopment } from '@shared/utils/environment'
 import { Device, NetworkInterface, PacketMetadata } from '@shared/interfaces/common'
+import { normalizeIPv6 } from '@main/shared/utils/address-normalizer'
 
 let analyzer: NetworkAnalyzer | null = null
 let writer: PacketWriter | null = null
@@ -34,9 +35,9 @@ function setupPeriodicTasks(
   }, PROC_CON_SNAPSHOT_INTERVAL_MS)
 }
 
-function sendDataToFrontend(pkt: PacketMetadata): void {
+function sendDataToFrontend(pkts: PacketMetadata[]): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('network-data', pkt)
+    mainWindow.webContents.send('network-data', pkts)
   }
 }
 
@@ -100,6 +101,7 @@ export async function startAnalyzer(interfaceName?: string): Promise<void> {
   const localIPs = deviceInfo.interfaces
     .flatMap((iface) => iface.addresses)
     .filter((addr) => addr && addr !== '0.0.0.0' && addr !== '::')
+    .map(normalizeIPv6)
 
   if (isDevelopment()) {
     const basePath = join(DEV_DATA_PATH, 'packets')
@@ -108,9 +110,9 @@ export async function startAnalyzer(interfaceName?: string): Promise<void> {
     writer = null
   }
 
-  analyzer = new NetworkAnalyzer(selectedInterface.name, localIPs, (pkt) => {
-    writer?.writePacket(pkt)
-    sendDataToFrontend(pkt)
+  analyzer = new NetworkAnalyzer(deviceInfo.bestInterface!.name, localIPs, (pkts) => {
+    pkts.forEach(pkt => writer?.writePacket(pkt))
+    sendDataToFrontend(pkts)
   })
 
   try {

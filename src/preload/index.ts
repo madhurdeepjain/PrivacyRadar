@@ -5,7 +5,7 @@ import type { PacketMetadata } from '../main/shared/interfaces/common'
 
 // Custom APIs for renderer
 const api: API = {
-  onNetworkData: (callback: (data: PacketMetadata) => void) => {
+  onNetworkData: (callback: (data: PacketMetadata[]) => void) => {
     ipcRenderer.on('network-data', (_event, data) => callback(data))
   },
   removeNetworkDataListener: () => {

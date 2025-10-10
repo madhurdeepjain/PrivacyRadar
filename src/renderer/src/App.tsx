@@ -103,40 +103,40 @@ function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
-    const handleNetworkData = (data: PacketData): void => {
+    const handleNetworkData = (data: PacketData[]): void => {
       setPacketCount((prev) => prev + 1)
-      setPackets((prev) => [data, ...prev].slice(0, 500)) // Keep last 500 packets
-      setTotalBytes((prev) => prev + data.size)
-      setLastPacketTimestamp(data.timestamp)
+      setPackets((prev) => [...data, ...prev].slice(0, 500)) // Keep last 500 packets
+      setTotalBytes((prev) => prev + data.reduce((acc, pkt) => acc + pkt.size, 0))
+      setLastPacketTimestamp(data[data.length - 1].timestamp)
       setAppStatsMap((prev) => {
-        const appName = data.procName || 'UNKNOWN'
-        const key = `${appName}-${data.pid ?? 'N/A'}`
         const next = { ...prev }
-
-        if (next[key]) {
-          const existing = next[key]
-          next[key] = {
-            ...existing,
-            packetCount: existing.packetCount + 1,
-            totalBytes: existing.totalBytes + data.size,
-            lastSeen: Math.max(existing.lastSeen, data.timestamp)
+        data.forEach((pkt) => {
+          const appName = pkt.procName || 'UNKNOWN'
+          const key = `${appName}-${pkt.pid ?? 'N/A'}`
+          if (next[key]) {
+            const existing = next[key]
+            next[key] = {
+              ...existing,
+              packetCount: existing.packetCount + 1,
+              totalBytes: existing.totalBytes + pkt.size,
+              lastSeen: Math.max(existing.lastSeen, pkt.timestamp)
+            }
+          } else {
+            next[key] = {
+              name: appName,
+              pid: pkt.pid,
+              packetCount: 1,
+              totalBytes: pkt.size,
+              lastSeen: pkt.timestamp
+            }
           }
-        } else {
-          next[key] = {
-            name: appName,
-            pid: data.pid,
-            packetCount: 1,
-            totalBytes: data.size,
-            lastSeen: data.timestamp
-          }
-        }
-
+        })
         return next
       })
 
       const samples = throughputSamplesRef.current
-      const windowStart = data.timestamp - 30_000
-      samples.push({ timestamp: data.timestamp, size: data.size })
+      const windowStart = data[data.length - 1].timestamp - 30_000
+      data.forEach((pkt) => samples.push({ timestamp: pkt.timestamp, size: pkt.size }))
       while (samples.length > 0 && samples[0].timestamp < windowStart) {
         samples.shift()
       }
@@ -145,7 +145,7 @@ function App(): React.JSX.Element {
         setBytesPerSecond(0)
       } else {
         const recentBytes = samples.reduce((acc, sample) => acc + sample.size, 0)
-        const spanSeconds = Math.max(1, (data.timestamp - samples[0].timestamp) / 1000)
+        const spanSeconds = Math.max(1, (samples[samples.length - 1].timestamp - samples[0].timestamp) / 1000)
         setBytesPerSecond(recentBytes / spanSeconds)
       }
     }

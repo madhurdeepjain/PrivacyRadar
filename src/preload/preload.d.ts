@@ -9,7 +9,7 @@ export interface InterfaceSelection {
 }
 
 export interface API {
-  onNetworkData: (callback: (data: PacketMetadata) => void) => void
+  onNetworkData: (callback: (data: PacketMetadata[]) => void) => void
   removeNetworkDataListener: () => void
   getNetworkInterfaces: () => Promise<InterfaceSelection>
   selectNetworkInterface: (interfaceName: string) => Promise<InterfaceSelection>

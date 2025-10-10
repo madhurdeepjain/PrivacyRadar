@@ -1,15 +1,21 @@
 export const IP_PROTOCOLS: Record<number, string> = {
   1: 'ICMP',
   2: 'IGMP',
+  4: 'IPv4',
   6: 'TCP',
   17: 'UDP',
   41: 'IPv6',
+  43: 'IPv6-Route',
+  44: 'IPv6-Frag',
   47: 'GRE',
   50: 'ESP',
   51: 'AH',
   58: 'ICMPv6',
+  60: 'IPv6-Dest-Opts',
   88: 'EIGRP',
   89: 'OSPF',
+  103: 'PIM',
+  115: 'L2TP',
   132: 'SCTP',
   136: 'UDPLite'
 }

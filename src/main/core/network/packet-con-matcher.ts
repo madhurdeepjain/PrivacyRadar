@@ -2,6 +2,7 @@ import { PacketMetadata, NetworkConnection } from '@shared/interfaces/common'
 
 export class PacketConMatcher {
   private connectionMap: Map<string, NetworkConnection> = new Map()
+  private localIPs: Set<string> = new Set()
 
   private createBidirectionalKey(
     addr1: string,
@@ -38,7 +39,7 @@ export class PacketConMatcher {
       if (key) {
         newMap.set(key, conn)
       }
-    }
+    } 
     this.connectionMap = newMap
   }
 
@@ -53,22 +54,14 @@ export class PacketConMatcher {
     if (!packetKey) return null
 
     const conn = this.connectionMap.get(packetKey)
-    if (conn) {
-      return conn
-    }
+    return conn ?? null
+  }
 
-    return null
+  setLocalIPs(ips: string[]): void {
+    this.localIPs = new Set(ips.map(ip => ip.toLowerCase()))
   }
 
   getConnections(): NetworkConnection[] {
     return Array.from(this.connectionMap.values())
-  }
-
-  getConnectionCount(): number {
-    return this.connectionMap.size
-  }
-
-  getDebugKeys(): string[] {
-    return Array.from(this.connectionMap.keys())
   }
 }

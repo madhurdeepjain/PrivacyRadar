@@ -66,6 +66,11 @@ export class PacketWriter {
 
   private determineType(pkt: PacketMetadata): PacketType | null {
     const protocol = pkt.protocol?.toUpperCase()
+
+    if (pkt.pid === -1 || pkt.procName === 'SYSTEM') {
+      return 'system'
+    }
+
     const isIPv6 = pkt.ipv6 !== undefined || pkt.srcIP?.includes(':')
 
     if (protocol?.includes('TCP')) {
