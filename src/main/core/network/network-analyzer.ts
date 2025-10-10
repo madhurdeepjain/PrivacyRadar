@@ -21,9 +21,9 @@ export class NetworkAnalyzer {
   private readonly trafficCapture: TrafficCapture
   private packetProcessingTimer: NodeJS.Timeout | null = null
   private connectionSyncTimer: NodeJS.Timeout | null = null
-  private readonly onPacketMatched: (pkt: PacketMetadata) => void
+  private readonly onPacketMatched: (pkt: PacketMetadata[]) => void
 
-  constructor(deviceName: string, localIPs: string[], onPacket: (pkt: PacketMetadata) => void) {
+  constructor(deviceName: string, localIPs: string[], onPacket: (pkt: PacketMetadata[]) => void) {
     this.processTracker = new ProcessTracker()
     this.connectionTracker = new ConnectionTracker()
     this.procConManager = new ProcConManager(this.processTracker, this.connectionTracker, localIPs)
@@ -48,7 +48,7 @@ export class NetworkAnalyzer {
       packets.forEach((pkt) => this.procConManager.enqueuePacket(pkt))
       const matchedPackets = this.procConManager.flushQueue()
 
-      matchedPackets.forEach((pkt) => this.onPacketMatched(pkt))
+      if (matchedPackets.length > 0) this.onPacketMatched(matchedPackets)
     }, PACKET_PROCESS_INTERVAL_MS)
   }
 

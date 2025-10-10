@@ -30,9 +30,9 @@ function setupPeriodicTasks(
   }, PROC_CON_SNAPSHOT_INTERVAL_MS)
 }
 
-function sendDataToFrontend(pkt: PacketMetadata): void {
+function sendDataToFrontend(pkts: PacketMetadata[]): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('network-data', pkt)
+    mainWindow.webContents.send('network-data', pkts)
   }
 }
 
@@ -64,9 +64,9 @@ export async function startAnalyzer(): Promise<void> {
     writer = null
   }
 
-  analyzer = new NetworkAnalyzer(deviceInfo.bestInterface.name, localIPs, (pkt) => {
-    writer?.writePacket(pkt)
-    sendDataToFrontend(pkt)
+  analyzer = new NetworkAnalyzer(deviceInfo.bestInterface.name, localIPs, (pkts) => {
+    pkts.forEach(pkt => writer?.writePacket(pkt))
+    sendDataToFrontend(pkts)
   })
 
   try {

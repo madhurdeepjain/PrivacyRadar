@@ -9,6 +9,8 @@ export class ProcConManager {
   private readonly matcher: PacketConMatcher = new PacketConMatcher()
   private packetQueue: PacketMetadata[] = []
   private readonly localIPs: Set<string>
+  private readonly systemProtocols = new Set(['ICMP', 'ICMPV6', 'IGMP', 'ARP'])
+  private readonly systemPorts = new Set([135, 137, 139, 445, 1900, 5355, 5353])
 
   constructor(
     private readonly processTracker: ProcessTracker,
@@ -46,6 +48,13 @@ export class ProcConManager {
   }
 
   enqueuePacket(pkt: PacketMetadata): void {
+
+    if (this.isSystemPacket(pkt)) {
+      pkt.pid = -1
+      pkt.procName = 'SYSTEM'
+      this.packetQueue.push(pkt)
+      return
+    }
     if (!pkt.protocol?.startsWith('UDP')) {
       const conn = this.matcher.matchPacketToCon(pkt)
       pkt.pid = conn?.pid
@@ -54,6 +63,23 @@ export class ProcConManager {
     } else {
       void this.matchUDPPacket(pkt)
     }
+  }
+
+  private isSystemPacket(pkt: PacketMetadata): boolean {
+    if (this.systemProtocols.has(pkt.protocol || '')) return true
+    const srcIP = pkt.srcIP ?? ''
+    const dstIP = pkt.dstIP ?? ''
+
+    if (srcIP.startsWith('224.') || dstIP.startsWith('224.')) return true
+    if (srcIP.startsWith('ff') || dstIP.startsWith('ff')) return true
+    if (srcIP.startsWith('169.254.') || dstIP.startsWith('169.254.')) return true
+    if (srcIP.startsWith('fe80:') || dstIP.startsWith('fe80:')) return true
+    if (dstIP === '255.255.255.255') return true
+
+    if ((this.systemPorts.has(pkt.srcport ?? 0)) || (this.systemPorts.has(pkt.dstport ?? 0))) {
+      return true
+    }
+    return false
   }
 
   private async matchUDPPacket(pkt: PacketMetadata): Promise<void> {

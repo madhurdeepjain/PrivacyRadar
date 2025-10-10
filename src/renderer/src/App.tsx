@@ -47,9 +47,9 @@ function App(): React.JSX.Element {
   const activityListRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const handleNetworkData = (data: PacketData): void => {
-      setPacketCount((prev) => prev + 1)
-      setPackets((prev) => [data, ...prev].slice(0, 500)) // Keep last 500 packets
+    const handleNetworkData = (data: PacketData[]): void => {
+      setPacketCount((prev) => prev + data.length)
+      setPackets((prev) => [...data, ...prev].slice(0, 500)) // Keep last 500 packets
     }
 
     window.api.onNetworkData(handleNetworkData)

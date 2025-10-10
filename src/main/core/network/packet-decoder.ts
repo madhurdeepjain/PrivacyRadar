@@ -80,8 +80,8 @@ export class PacketDecoder {
       metadata.srcport = tcp.info.srcport
       metadata.dstport = tcp.info.dstport
       metadata.protocol = 'TCP'
-      metadata.srcPortService = WK_PORTS[tcp.info.srcport] ?? 'Unknown'
-      metadata.dstPortService = WK_PORTS[tcp.info.dstport] ?? 'Unknown'
+      metadata.srcPortService = WK_PORTS[tcp.info.srcport] ?? 'N/A'
+      metadata.dstPortService = WK_PORTS[tcp.info.dstport] ?? 'N/A'
     } else if (ipProtocol === 17) {
       const udp = this.decoders.UDP(buffer, ipOffset)
       metadata.udp = {
@@ -92,8 +92,8 @@ export class PacketDecoder {
       }
       metadata.srcport = udp.info.srcport
       metadata.dstport = udp.info.dstport
-      metadata.srcPortService = WK_PORTS[udp.info.srcport] ?? 'Unknown'
-      metadata.dstPortService = WK_PORTS[udp.info.dstport] ?? 'Unknown'
+      metadata.srcPortService = WK_PORTS[udp.info.srcport] ?? 'N/A'
+      metadata.dstPortService = WK_PORTS[udp.info.dstport] ?? 'N/A'
       metadata.protocol = 'UDP'
     } else if (ipProtocol !== null) {
       metadata.protocol = IP_PROTOCOLS[ipProtocol]?.toUpperCase() ?? `IP-${ipProtocol}`
