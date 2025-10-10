@@ -62,7 +62,7 @@ export class ConnectionTracker {
                 srcport: localPort,
                 dstaddr: remoteAddr,
                 dstport: row.remote?.port ?? undefined,
-                protocol: proto,
+                protocol: 'TCP',
                 state
               })
 
@@ -88,7 +88,7 @@ export class ConnectionTracker {
 
               if (isListener) {
                 udpMap.set(`${localAddr}:${localPort}`, { ...mapping })
-                udpMap.set(`:${localPort}`, { ...mapping, address: '' })
+                udpMap.set(`:${localPort}`, { ...mapping, address: '*' })
               } else {
                 udpMap.set(`${localAddr}:${localPort}`, mapping)
               }
@@ -100,7 +100,7 @@ export class ConnectionTracker {
                 srcport: localPort,
                 dstaddr: remoteAddr,
                 dstport: row.remote?.port ?? undefined,
-                protocol: proto,
+                protocol: 'UDP',
                 state: isListener ? 'LISTENING' : 'ESTABLISHED'
               })
             }
