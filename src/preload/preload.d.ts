@@ -4,15 +4,16 @@ import type { PacketMetadata, NetworkInterface } from '../main/shared/interfaces
 export interface InterfaceSelection {
   interfaces: NetworkInterface[]
   bestInterfaceName?: string
-  selectedInterfaceName?: string
+  selectedInterfaceNames: string[]
   isCapturing: boolean
+  activeInterfaceNames: string[]
 }
 
 export interface API {
   onNetworkData: (callback: (data: PacketMetadata) => void) => void
   removeNetworkDataListener: () => void
   getNetworkInterfaces: () => Promise<InterfaceSelection>
-  selectNetworkInterface: (interfaceName: string) => Promise<InterfaceSelection>
+  selectNetworkInterface: (interfaceNames: string[]) => Promise<InterfaceSelection>
   startCapture: () => Promise<InterfaceSelection>
   stopCapture: () => Promise<InterfaceSelection>
 }
