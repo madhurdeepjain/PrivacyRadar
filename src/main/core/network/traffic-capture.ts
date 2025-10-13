@@ -39,6 +39,7 @@ export class TrafficCapture {
 
         const metadata = this.decoder.decode(packetCopy, nbytes)
         if (metadata) {
+          metadata.interfaceName = deviceName
           this.packetQueue.push(metadata)
         }
       })

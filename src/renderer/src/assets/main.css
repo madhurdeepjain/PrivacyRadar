@@ -55,36 +55,37 @@ body {
   padding: 0;
   overflow: hidden;
   user-select: none;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  color: #2c3e50;
+  background: radial-gradient(circle at top, #0f172a 0%, #060914 45%, #020309 100%);
+  color: #e2e8f0;
   font-family:
     'Inter',
-    'SF Pro Display',
+    'SF Pro Text',
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
-  line-height: 1.4;
+  line-height: 1.5;
   height: 100vh;
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 5px;
+  background: rgba(30, 41, 59, 0.45);
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
-  border-radius: 5px;
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.8) 0%, rgba(37, 99, 235, 0.85) 100%);
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #5568d3 0%, #6a428f 100%);
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.9) 0%, rgba(59, 130, 246, 0.95) 100%);
 }
 
 code {
@@ -105,12 +106,9 @@ code {
 
 #root {
   height: 100vh;
-  padding: 24px 28px;
-  display: flex;
-  justify-content: center;
-  align-items: stretch;
   width: 100%;
   overflow: hidden;
+  display: flex;
 }
 
 .logo {
@@ -125,29 +123,30 @@ code {
   filter: drop-shadow(0 0 1.2em #6988e6aa);
 }
 
+
 .versions {
-  margin: 30px auto 0;
-  padding: 15px 0;
+  margin: 12px auto 0;
+  padding: 12px 0;
   font-family: 'Menlo', 'Lucida Console', monospace;
   display: inline-flex;
   overflow: hidden;
   align-items: center;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(24px);
-  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 10px 28px rgba(8, 47, 73, 0.38);
+  border: 1px solid rgba(71, 85, 105, 0.35);
 }
 
 .versions li {
   display: block;
   float: left;
-  border-right: 1px solid rgba(150, 150, 150, 0.3);
+  border-right: 1px solid rgba(148, 163, 184, 0.25);
   padding: 0 20px;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 14px;
-  opacity: 0.7;
-  color: #4a5568;
+  opacity: 0.75;
+  color: rgba(226, 232, 240, 0.75);
   &:last-child {
     border: none;
   }
