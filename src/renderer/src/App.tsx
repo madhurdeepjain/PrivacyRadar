@@ -7,6 +7,7 @@ interface InterfaceOption {
   name: string
   description: string
   addresses: string[]
+  friendlyName?: string
 }
 
 interface PacketData {
@@ -228,14 +229,24 @@ function App(): React.JSX.Element {
   }
 
   const renderInterfaceOptionLabel = (iface: InterfaceOption): string => {
-    const parts = [iface.description || iface.name]
-    if (iface.description && iface.description !== iface.name) {
-      parts.push(`(${iface.name})`)
+    const primaryLabel = iface.friendlyName || iface.description || iface.name
+    const detailParts: string[] = []
+
+    if (iface.friendlyName && iface.friendlyName !== iface.name) {
+      detailParts.push(iface.name)
+    } else if (!iface.friendlyName && iface.description && iface.description !== iface.name) {
+      detailParts.push(iface.name)
     }
+
     if (iface.addresses.length > 0) {
-      parts.push(`- ${iface.addresses.join(', ')}`)
+      detailParts.push(iface.addresses.join(', '))
     }
-    return parts.join(' ')
+
+    if (detailParts.length === 0) {
+      return primaryLabel
+    }
+
+    return `${primaryLabel} (${detailParts.join(' · ')})`
   }
 
   return (
