@@ -3,6 +3,15 @@ import Versions from './components/Versions'
 import logo from '../../../resources/icon.png'
 import styles from './App.module.css'
 
+interface InterfaceOption {
+  name: string
+  description: string
+  addresses: string[]
+  friendlyName?: string
+}
+
+type InterfaceSelectionResult = Awaited<ReturnType<(typeof window.api)['getNetworkInterfaces']>>
+
 interface PacketData {
   pid?: number
   procName?: string
@@ -44,17 +53,135 @@ interface AppStats {
 function App(): React.JSX.Element {
   const [packets, setPackets] = useState<PacketData[]>([])
   const [packetCount, setPacketCount] = useState(0)
+  const [totalBytes, setTotalBytes] = useState(0)
+  const [appStatsMap, setAppStatsMap] = useState<Record<string, AppStats>>({})
+  const [lastPacketTimestamp, setLastPacketTimestamp] = useState<number | undefined>(undefined)
+  const throughputSamplesRef = useRef<Array<{ timestamp: number; size: number }>>([])
+  const [bytesPerSecond, setBytesPerSecond] = useState(0)
+  const [isCapturing, setIsCapturing] = useState(false)
+  const [isUpdatingCapture, setIsUpdatingCapture] = useState(false)
+  const [interfaces, setInterfaces] = useState<InterfaceOption[]>([])
+  const [selectedInterface, setSelectedInterface] = useState('')
+  const [isSwitchingInterface, setIsSwitchingInterface] = useState(false)
+  const [interfaceError, setInterfaceError] = useState<string | null>(null)
+  const [captureError, setCaptureError] = useState<string | null>(null)
   const activityListRef = useRef<HTMLDivElement>(null)
+
+  const resetCaptureState = (): void => {
+    setPackets([])
+    setPacketCount(0)
+    setTotalBytes(0)
+    setAppStatsMap({})
+    setLastPacketTimestamp(undefined)
+    throughputSamplesRef.current = []
+    setBytesPerSecond(0)
+  }
+
+  const applyInterfaceSelection = (selection: InterfaceSelectionResult): void => {
+    setInterfaces(selection.interfaces)
+    setSelectedInterface(
+      selection.selectedInterfaceName ||
+        selection.bestInterfaceName ||
+        selection.interfaces[0]?.name ||
+        ''
+    )
+    setIsCapturing(Boolean(selection.isCapturing))
+  }
+
+  useEffect(() => {
+    const initializeInterfaces = async (): Promise<void> => {
+      try {
+        const selection = await window.api.getNetworkInterfaces()
+        applyInterfaceSelection(selection)
+      } catch (error) {
+        console.error('Failed to load network interfaces', error)
+        setInterfaceError('Unable to load network interfaces')
+      }
+    }
+
+    void initializeInterfaces()
+  }, [])
 
   useEffect(() => {
     const handleNetworkData = (data: PacketData): void => {
       setPacketCount((prev) => prev + 1)
       setPackets((prev) => [data, ...prev].slice(0, 500)) // Keep last 500 packets
+      setTotalBytes((prev) => prev + data.size)
+      setLastPacketTimestamp(data.timestamp)
+      setAppStatsMap((prev) => {
+        const appName = data.procName || 'UNKNOWN'
+        const key = `${appName}-${data.pid ?? 'N/A'}`
+        const next = { ...prev }
+
+        if (next[key]) {
+          const existing = next[key]
+          next[key] = {
+            ...existing,
+            packetCount: existing.packetCount + 1,
+            totalBytes: existing.totalBytes + data.size,
+            lastSeen: Math.max(existing.lastSeen, data.timestamp)
+          }
+        } else {
+          next[key] = {
+            name: appName,
+            pid: data.pid,
+            packetCount: 1,
+            totalBytes: data.size,
+            lastSeen: data.timestamp
+          }
+        }
+
+        return next
+      })
+
+      const samples = throughputSamplesRef.current
+      const windowStart = data.timestamp - 30_000
+      samples.push({ timestamp: data.timestamp, size: data.size })
+      while (samples.length > 0 && samples[0].timestamp < windowStart) {
+        samples.shift()
+      }
+
+      if (samples.length === 0) {
+        setBytesPerSecond(0)
+      } else {
+        const recentBytes = samples.reduce((acc, sample) => acc + sample.size, 0)
+        const spanSeconds = Math.max(1, (data.timestamp - samples[0].timestamp) / 1000)
+        setBytesPerSecond(recentBytes / spanSeconds)
+      }
     }
 
     window.api.onNetworkData(handleNetworkData)
     return () => {
       window.api.removeNetworkDataListener()
+    }
+  }, [])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const samples = throughputSamplesRef.current
+      if (samples.length === 0) {
+        setBytesPerSecond((prev) => (prev !== 0 ? 0 : prev))
+        return
+      }
+
+      const now = Date.now()
+      const windowStart = now - 30_000
+      while (samples.length > 0 && samples[0].timestamp < windowStart) {
+        samples.shift()
+      }
+
+      if (samples.length === 0) {
+        setBytesPerSecond((prev) => (prev !== 0 ? 0 : prev))
+        return
+      }
+
+      const recentBytes = samples.reduce((acc, sample) => acc + sample.size, 0)
+      const spanSeconds = Math.max(1, (now - samples[0].timestamp) / 1000)
+      setBytesPerSecond(recentBytes / spanSeconds)
+    }, 1000)
+
+    return () => {
+      window.clearInterval(interval)
     }
   }, [])
 
@@ -82,70 +209,17 @@ function App(): React.JSX.Element {
   }
 
   const appStats = useMemo(() => {
-    const appMap = new Map<string, AppStats>()
-
-    packets.forEach((packet) => {
-      const appName = packet.procName || 'UNKNOWN'
-      const key = `${appName}-${packet.pid ?? 'N/A'}`
-
-      if (appMap.has(key)) {
-        const existing = appMap.get(key)!
-        existing.packetCount++
-        existing.totalBytes += packet.size
-        existing.lastSeen = Math.max(existing.lastSeen, packet.timestamp)
-      } else {
-        appMap.set(key, {
-          name: appName,
-          pid: packet.pid,
-          packetCount: 1,
-          totalBytes: packet.size,
-          lastSeen: packet.timestamp
-        })
-      }
-    })
-
-    return Array.from(appMap.values()).sort((a, b) => b.packetCount - a.packetCount)
-  }, [packets])
+    return Object.values(appStatsMap).sort((a, b) => b.packetCount - a.packetCount)
+  }, [appStatsMap])
 
   const summary = useMemo(() => {
-    if (packets.length === 0) {
-      return {
-        totalBytes: 0,
-        uniqueApps: 0,
-        bytesPerSecond: 0,
-        lastPacketTimestamp: undefined as number | undefined
-      }
-    }
-
-    const totalBytes = packets.reduce((acc, packet) => acc + packet.size, 0)
-    const uniqueApps = new Set<string>()
-    const now = Date.now()
-    let recentBytes = 0
-    let oldestRecentTimestamp = Number.POSITIVE_INFINITY
-
-    packets.forEach((packet) => {
-      uniqueApps.add(`${packet.procName || 'UNKNOWN'}-${packet.pid ?? 'N/A'}`)
-
-      if (now - packet.timestamp <= 30_000) {
-        recentBytes += packet.size
-        oldestRecentTimestamp = Math.min(oldestRecentTimestamp, packet.timestamp)
-      }
-    })
-
-    const windowSeconds = Math.max(
-      1,
-      (now - (oldestRecentTimestamp === Number.POSITIVE_INFINITY ? now : oldestRecentTimestamp)) /
-        1000
-    )
-    const bytesPerSecond = recentBytes / windowSeconds
-
     return {
       totalBytes,
-      uniqueApps: uniqueApps.size,
+      uniqueApps: Object.keys(appStatsMap).length,
       bytesPerSecond: Number.isFinite(bytesPerSecond) ? bytesPerSecond : 0,
-      lastPacketTimestamp: packets[0]?.timestamp
+      lastPacketTimestamp
     }
-  }, [packets])
+  }, [totalBytes, appStatsMap, bytesPerSecond, lastPacketTimestamp])
 
   const topApps = useMemo(() => appStats.slice(0, 8), [appStats])
 
@@ -173,6 +247,72 @@ function App(): React.JSX.Element {
     return new Date(timestamp).toLocaleTimeString()
   }
 
+  const handleInterfaceChange = async (
+    event: React.ChangeEvent<HTMLSelectElement>
+  ): Promise<void> => {
+    const nextInterface = event.target.value
+    setSelectedInterface(nextInterface)
+    setIsSwitchingInterface(true)
+    setInterfaceError(null)
+    setCaptureError(null)
+
+    try {
+      const selection = await window.api.selectNetworkInterface(nextInterface)
+      applyInterfaceSelection(selection)
+      resetCaptureState()
+    } catch (error) {
+      console.error('Failed to switch network interface', error)
+      setInterfaceError('Unable to switch interface')
+    } finally {
+      setIsSwitchingInterface(false)
+    }
+  }
+
+  const handleToggleCapture = async (): Promise<void> => {
+    setCaptureError(null)
+    setIsUpdatingCapture(true)
+
+    try {
+      const selection = isCapturing
+        ? await window.api.stopCapture()
+        : await window.api.startCapture()
+
+      applyInterfaceSelection(selection)
+
+      if (!selection.isCapturing) {
+        // When capture stops we keep the existing state so insights remain visible.
+        throughputSamplesRef.current = []
+        setBytesPerSecond(0)
+      }
+    } catch (error) {
+      console.error('Failed to toggle capture state', error)
+      setCaptureError(isCapturing ? 'Unable to pause capture' : 'Unable to start capture')
+    } finally {
+      setIsUpdatingCapture(false)
+    }
+  }
+
+  const renderInterfaceOptionLabel = (iface: InterfaceOption): string => {
+    const primaryLabel = iface.friendlyName || iface.description || iface.name
+    const detailParts: string[] = []
+
+    if (iface.friendlyName && iface.friendlyName !== iface.name) {
+      detailParts.push(iface.name)
+    } else if (!iface.friendlyName && iface.description && iface.description !== iface.name) {
+      detailParts.push(iface.name)
+    }
+
+    if (iface.addresses.length > 0) {
+      detailParts.push(iface.addresses.join(', '))
+    }
+
+    if (detailParts.length === 0) {
+      return primaryLabel
+    }
+
+    return `${primaryLabel} (${detailParts.join(' · ')})`
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.topBar}>
@@ -183,9 +323,74 @@ function App(): React.JSX.Element {
             <p className={styles.brandSubtitle}>Real-time network intelligence</p>
           </div>
         </div>
-        <div className={styles.liveBadge}>
-          <span className={styles.liveDot} aria-hidden />
-          {packets.length > 0 ? 'Streaming now' : 'Waiting for packets'}
+        <div className={styles.capturePanel}>
+          <div className={styles.interfaceSelector}>
+            <label className={styles.interfaceLabel} htmlFor="interface-select">
+              Capturing on
+            </label>
+            <select
+              id="interface-select"
+              className={styles.interfaceSelect}
+              value={selectedInterface}
+              onChange={handleInterfaceChange}
+              disabled={interfaces.length === 0 || isSwitchingInterface || isUpdatingCapture}
+            >
+              {interfaces.length === 0 ? (
+                <option value="">No interfaces available</option>
+              ) : (
+                interfaces.map((iface) => (
+                  <option key={iface.name} value={iface.name}>
+                    {renderInterfaceOptionLabel(iface)}
+                  </option>
+                ))
+              )}
+            </select>
+            {isSwitchingInterface && (
+              <span className={styles.interfaceStatus}>Switching interface...</span>
+            )}
+            {interfaceError && <span className={styles.interfaceError}>{interfaceError}</span>}
+          </div>
+          <div className={styles.captureControls}>
+            <button
+              type="button"
+              className={`${styles.captureButton} ${
+                isCapturing ? styles.captureButtonPause : styles.captureButtonStart
+              }`}
+              onClick={handleToggleCapture}
+              disabled={interfaces.length === 0 || isSwitchingInterface || isUpdatingCapture}
+            >
+              {isUpdatingCapture
+                ? isCapturing
+                  ? 'Pausing capture...'
+                  : 'Starting capture...'
+                : isCapturing
+                  ? 'Pause capture'
+                  : 'Start capture'}
+            </button>
+            <span className={styles.captureHint}>
+              {isUpdatingCapture
+                ? isCapturing
+                  ? 'Pausing capture'
+                  : 'Starting capture'
+                : isCapturing
+                  ? 'Capturing live traffic'
+                  : 'Capture paused'}
+            </span>
+            {captureError && <span className={styles.captureError}>{captureError}</span>}
+          </div>
+        </div>
+        <div className={`${styles.liveBadge} ${!isCapturing ? styles.liveBadgePaused : ''}`}>
+          <span
+            className={`${styles.liveDot} ${!isCapturing ? styles.liveDotPaused : ''}`}
+            aria-hidden
+          />
+          {isUpdatingCapture
+            ? 'Updating capture...'
+            : isCapturing
+              ? packets.length > 0
+                ? 'Streaming now'
+                : 'Capturing...'
+              : 'Capture paused'}
         </div>
       </header>
 
@@ -200,7 +405,7 @@ function App(): React.JSX.Element {
         <article className={styles.metricCard}>
           <span className={styles.metricLabel}>Active applications</span>
           <span className={styles.metricValue}>{summary.uniqueApps.toLocaleString()}</span>
-          <span className={styles.metricHint}>Across the latest 500 packets</span>
+          <span className={styles.metricHint}>Since capture started</span>
         </article>
         <article className={styles.metricCard}>
           <span className={styles.metricLabel}>Throughput (30s avg)</span>
@@ -210,7 +415,7 @@ function App(): React.JSX.Element {
         <article className={styles.metricCard}>
           <span className={styles.metricLabel}>Data observed</span>
           <span className={styles.metricValue}>{formatBytes(summary.totalBytes)}</span>
-          <span className={styles.metricHint}>From the last 500 packets</span>
+          <span className={styles.metricHint}>Since capture started</span>
         </article>
       </section>
 

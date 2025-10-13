@@ -9,6 +9,7 @@ export interface NetworkInterface {
   name: string
   description: string
   addresses: string[]
+  friendlyName?: string
 }
 
 export interface ProcDetails {

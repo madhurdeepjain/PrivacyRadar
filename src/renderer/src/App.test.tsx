@@ -20,14 +20,27 @@ describe('App dashboard', () => {
     window.api.removeNetworkDataListener = () => {
       listeners.length = 0
     }
+    window.api.getNetworkInterfaces = vi.fn().mockResolvedValue({
+      interfaces: [],
+      bestInterfaceName: undefined,
+      selectedInterfaceName: undefined
+    })
+    window.api.selectNetworkInterface = vi.fn().mockResolvedValue({
+      interfaces: [],
+      bestInterfaceName: undefined,
+      selectedInterfaceName: undefined
+    })
   })
 
   afterEach(() => {
     vi.useRealTimers()
   })
 
-  it('renders the idle state when no packets have arrived', () => {
-    render(<App />)
+  it('renders the idle state when no packets have arrived', async () => {
+    await act(async () => {
+      render(<App />)
+      await Promise.resolve()
+    })
 
     expect(screen.getByRole('heading', { level: 1, name: /privacyradar/i })).toBeInTheDocument()
     expect(screen.getByText(/waiting for packets/i)).toBeInTheDocument()
@@ -35,7 +48,10 @@ describe('App dashboard', () => {
   })
 
   it('updates metrics when new packet data streams in', async () => {
-    render(<App />)
+    await act(async () => {
+      render(<App />)
+      await Promise.resolve()
+    })
 
     const samplePacket: Packet = {
       procName: 'Test App',
