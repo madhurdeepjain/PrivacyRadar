@@ -8,6 +8,7 @@ import { getDeviceInfo } from '@shared/utils/device-info'
 import { setBestInterfaceInfo } from '@shared/utils/interface-utils'
 import { isDevelopment } from '@shared/utils/environment'
 import { PacketMetadata } from '@shared/interfaces/common'
+import { normalizeIPv6 } from '@main/shared/utils/address-normalizer'
 
 let analyzer: NetworkAnalyzer | null = null
 let writer: PacketWriter | null = null
@@ -53,9 +54,9 @@ export async function startAnalyzer(): Promise<void> {
     throw new Error('No suitable network interface found')
   }
 
-  const localIPs = deviceInfo.interfaces
-    .flatMap((iface) => iface.addresses)
+  const localIPs = deviceInfo.bestInterface.addresses
     .filter((addr) => addr && addr !== '0.0.0.0' && addr !== '::')
+    .map(normalizeIPv6)
 
   if (isDevelopment()) {
     const basePath = join(DEV_DATA_PATH, 'packets')

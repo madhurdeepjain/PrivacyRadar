@@ -45,8 +45,14 @@ export class ConnectionTracker {
           if (!row) return
 
           try {
-            const proto = (row.protocol ?? '').toUpperCase()
-            const localAddr = normalizeIPv6(row.local?.address ?? '')
+            const rawProto = (row.protocol ?? '').toLowerCase()
+            const hasIPv6Addr = row.local?.address?.includes(':') || row.remote?.address?.includes(':')
+            const isIPv6 = rawProto === 'tcp6' || (rawProto === 'udp' && hasIPv6Addr)
+
+            const localAddr = row.local?.address 
+              ? normalizeIPv6(row.local.address) 
+              : (isIPv6 ? '::' : '0.0.0.0')
+
             const localPort = row.local?.port
             const remoteAddr = row.remote?.address ? normalizeIPv6(row.remote.address) : undefined
             const state = row.state ?? ''
@@ -54,7 +60,7 @@ export class ConnectionTracker {
             if (!localPort || !row.pid) return
             if (this.isLoopback(localAddr) || (remoteAddr && this.isLoopback(remoteAddr))) return
 
-            if (proto.startsWith('TCP')) {
+            if (rawProto.startsWith('tcp')) {
               connectionsList.push({
                 pid: row.pid,
                 procName: '',
@@ -73,7 +79,7 @@ export class ConnectionTracker {
                   lastSeen: Date.now()
                 })
               }
-            } else if (proto.startsWith('UDP')) {
+            } else if (rawProto.startsWith('udp')) {
               const isListener =
                 !remoteAddr || remoteAddr === '*' || remoteAddr === '0.0.0.0' || remoteAddr === '::'
 

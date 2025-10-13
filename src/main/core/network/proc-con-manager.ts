@@ -1,6 +1,5 @@
 import { PacketMetadata, NetworkConnection, UDPPortMapping } from '@shared/interfaces/common'
 import { normalizeIPv6 } from '@shared/utils/address-normalizer'
-import { logger } from '@infra/logging'
 import { ProcessTracker } from './process-tracker'
 import { ConnectionTracker } from './connection-tracker'
 import { PacketConMatcher } from './packet-con-matcher'
@@ -18,11 +17,11 @@ export class ProcConManager {
     localIPs: string[]
   ) {
     this.localIPs = new Set(localIPs.map((ip) => normalizeIPv6(ip)))
+    this.matcher.setLocalIPs(localIPs)
   }
 
   updateProcConInfo(): void {
     const connections = this.connectionTracker.getConnections()
-
     connections.forEach((conn) => {
       if (conn.pid) {
         conn.procName = this.processTracker.getProcessName(conn.pid) ?? 'UNKNOWN'
@@ -57,8 +56,38 @@ export class ProcConManager {
     }
     if (!pkt.protocol?.startsWith('UDP')) {
       const conn = this.matcher.matchPacketToCon(pkt)
-      pkt.pid = conn?.pid
-      pkt.procName = conn?.procName ?? 'UNKNOWN'
+
+      if (conn) {
+        pkt.pid = conn?.pid
+        pkt.procName = conn?.procName ?? 'UNKNOWN'
+      } else {
+        const srcIsLocal = this.localIPs.has(pkt.srcIP ?? '')
+        const dstIsLocal = this.localIPs.has(pkt.dstIP ?? '')
+        const tcpMap = this.connectionTracker.getTCPConMap()
+        let info: { pid: number; procName: string; lastSeen: number } | undefined
+
+        if (dstIsLocal && pkt.dstIP && pkt.dstport) {
+          info = tcpMap.get(`${pkt.dstIP}:${pkt.dstport}`)
+
+          if (!info) {
+            const wildcard = pkt.dstIP.includes(':') ? '::' : '0.0.0.0'
+            info = tcpMap.get(`${wildcard}:${pkt.dstport}`)
+          }
+        }
+
+        if (!info && srcIsLocal && pkt.srcIP && pkt.srcport) {
+          info = tcpMap.get(`${pkt.srcIP}:${pkt.srcport}`)
+
+          if (!info) {
+            const wildcard = pkt.srcIP.includes(':') ? '::' : '0.0.0.0'
+            info = tcpMap.get(`${wildcard}:${pkt.srcport}`)
+          }
+        }
+
+        pkt.pid = info?.pid
+        pkt.procName = info?.procName ?? 'UNKNOWN'
+      }
+
       this.packetQueue.push(pkt)
     } else {
       void this.matchUDPPacket(pkt)
@@ -102,8 +131,6 @@ export class ProcConManager {
 
     pkt.procName = mapping?.procName ?? 'UNKNOWN'
     if (mapping) mapping.lastSeen = Date.now()
-
-    logger.debug('Matched UDP packet', { pid: pkt.pid, procName: pkt.procName })
 
     this.packetQueue.push(pkt)
   }
