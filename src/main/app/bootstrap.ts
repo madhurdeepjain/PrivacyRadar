@@ -1,11 +1,19 @@
-import { app } from 'electron'
+import { app, ipcMain } from 'electron'
 import { electronApp } from '@electron-toolkit/utils'
 import { logger } from '@infra/logging'
 import { runMigrations } from '@infra/db/migrate'
 import { getDatabase } from '@infra/db'
 import { createMainWindow } from './window-manager'
-import { startAnalyzer, stopAnalyzer, setMainWindow } from './analyzer-runner'
+import {
+  startAnalyzer,
+  stopAnalyzer,
+  setMainWindow,
+  getInterfaceSelection,
+  switchAnalyzerInterface
+} from './analyzer-runner'
 import { registerAppLifecycleHandlers, registerProcessSignalHandlers } from './lifecycle'
+
+let ipcHandlersRegistered = false
 
 export async function startApp(): Promise<void> {
   registerProcessSignalHandlers()
@@ -32,6 +40,15 @@ export async function startApp(): Promise<void> {
 
   const mainWindow = createMainWindow()
   setMainWindow(mainWindow)
+
+  if (!ipcHandlersRegistered) {
+    ipcMain.handle('network:getInterfaces', async () => getInterfaceSelection())
+    ipcMain.handle('network:selectInterface', async (_event, interfaceName: string) => {
+      await switchAnalyzerInterface(interfaceName)
+      return getInterfaceSelection()
+    })
+    ipcHandlersRegistered = true
+  }
 
   try {
     await startAnalyzer()

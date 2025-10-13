@@ -19,7 +19,9 @@ Object.defineProperty(window, 'electron', {
 
 const apiStub: API = {
   onNetworkData: vi.fn(),
-  removeNetworkDataListener: vi.fn()
+  removeNetworkDataListener: vi.fn(),
+  getNetworkInterfaces: vi.fn(),
+  selectNetworkInterface: vi.fn()
 }
 
 Object.defineProperty(window, 'api', {

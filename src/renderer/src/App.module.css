@@ -26,6 +26,62 @@
   flex-shrink: 0;
 }
 
+.interfaceSelector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  min-width: 240px;
+}
+
+.interfaceLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #718096;
+}
+
+.interfaceSelect {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(102, 126, 234, 0.35);
+  background: rgba(255, 255, 255, 0.95);
+  color: #2d3748;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 6px 18px rgba(102, 126, 234, 0.15);
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.interfaceSelect:focus {
+  outline: none;
+  border-color: rgba(102, 126, 234, 0.7);
+  box-shadow:
+    0 0 0 3px rgba(102, 126, 234, 0.2),
+    0 10px 24px rgba(102, 126, 234, 0.2);
+}
+
+.interfaceSelect:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.interfaceError {
+  font-size: 11px;
+  color: #e53e3e;
+  font-weight: 600;
+}
+
+.interfaceStatus {
+  font-size: 11px;
+  color: #5a67d8;
+  font-weight: 600;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -601,6 +657,10 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 16px;
+  }
+
+  .interfaceSelector {
+    width: 100%;
   }
 
   .metricCard {

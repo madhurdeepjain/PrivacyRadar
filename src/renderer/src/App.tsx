@@ -3,6 +3,12 @@ import Versions from './components/Versions'
 import logo from '../../../resources/icon.png'
 import styles from './App.module.css'
 
+interface InterfaceOption {
+  name: string
+  description: string
+  addresses: string[]
+}
+
 interface PacketData {
   pid?: number
   procName?: string
@@ -44,7 +50,31 @@ interface AppStats {
 function App(): React.JSX.Element {
   const [packets, setPackets] = useState<PacketData[]>([])
   const [packetCount, setPacketCount] = useState(0)
+  const [interfaces, setInterfaces] = useState<InterfaceOption[]>([])
+  const [selectedInterface, setSelectedInterface] = useState('')
+  const [isSwitchingInterface, setIsSwitchingInterface] = useState(false)
+  const [interfaceError, setInterfaceError] = useState<string | null>(null)
   const activityListRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const initializeInterfaces = async (): Promise<void> => {
+      try {
+        const selection = await window.api.getNetworkInterfaces()
+        setInterfaces(selection.interfaces)
+        setSelectedInterface(
+          selection.selectedInterfaceName ||
+            selection.bestInterfaceName ||
+            selection.interfaces[0]?.name ||
+            ''
+        )
+      } catch (error) {
+        console.error('Failed to load network interfaces', error)
+        setInterfaceError('Unable to load network interfaces')
+      }
+    }
+
+    void initializeInterfaces()
+  }, [])
 
   useEffect(() => {
     const handleNetworkData = (data: PacketData): void => {
@@ -173,6 +203,41 @@ function App(): React.JSX.Element {
     return new Date(timestamp).toLocaleTimeString()
   }
 
+  const handleInterfaceChange = async (
+    event: React.ChangeEvent<HTMLSelectElement>
+  ): Promise<void> => {
+    const nextInterface = event.target.value
+    setSelectedInterface(nextInterface)
+    setIsSwitchingInterface(true)
+    setInterfaceError(null)
+
+    try {
+      const selection = await window.api.selectNetworkInterface(nextInterface)
+      setInterfaces(selection.interfaces)
+      setSelectedInterface(
+        selection.selectedInterfaceName || selection.bestInterfaceName || nextInterface
+      )
+      setPackets([])
+      setPacketCount(0)
+    } catch (error) {
+      console.error('Failed to switch network interface', error)
+      setInterfaceError('Unable to switch interface')
+    } finally {
+      setIsSwitchingInterface(false)
+    }
+  }
+
+  const renderInterfaceOptionLabel = (iface: InterfaceOption): string => {
+    const parts = [iface.description || iface.name]
+    if (iface.description && iface.description !== iface.name) {
+      parts.push(`(${iface.name})`)
+    }
+    if (iface.addresses.length > 0) {
+      parts.push(`- ${iface.addresses.join(', ')}`)
+    }
+    return parts.join(' ')
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.topBar}>
@@ -182,6 +247,32 @@ function App(): React.JSX.Element {
             <h1 className={styles.brandTitle}>PrivacyRadar</h1>
             <p className={styles.brandSubtitle}>Real-time network intelligence</p>
           </div>
+        </div>
+        <div className={styles.interfaceSelector}>
+          <label className={styles.interfaceLabel} htmlFor="interface-select">
+            Capturing on
+          </label>
+          <select
+            id="interface-select"
+            className={styles.interfaceSelect}
+            value={selectedInterface}
+            onChange={handleInterfaceChange}
+            disabled={interfaces.length === 0 || isSwitchingInterface}
+          >
+            {interfaces.length === 0 ? (
+              <option value="">No interfaces available</option>
+            ) : (
+              interfaces.map((iface) => (
+                <option key={iface.name} value={iface.name}>
+                  {renderInterfaceOptionLabel(iface)}
+                </option>
+              ))
+            )}
+          </select>
+          {isSwitchingInterface && (
+            <span className={styles.interfaceStatus}>Switching interface...</span>
+          )}
+          {interfaceError && <span className={styles.interfaceError}>{interfaceError}</span>}
         </div>
         <div className={styles.liveBadge}>
           <span className={styles.liveDot} aria-hidden />

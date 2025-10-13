@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { API } from './preload'
+import type { API, InterfaceSelection } from './preload'
 import type { PacketMetadata } from '../main/shared/interfaces/common'
 
 // Custom APIs for renderer
@@ -10,6 +10,12 @@ const api: API = {
   },
   removeNetworkDataListener: () => {
     ipcRenderer.removeAllListeners('network-data')
+  },
+  getNetworkInterfaces: async (): Promise<InterfaceSelection> => {
+    return ipcRenderer.invoke('network:getInterfaces')
+  },
+  selectNetworkInterface: async (interfaceName: string): Promise<InterfaceSelection> => {
+    return ipcRenderer.invoke('network:selectInterface', interfaceName)
   }
 }
 
