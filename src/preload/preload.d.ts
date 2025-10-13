@@ -5,6 +5,7 @@ export interface InterfaceSelection {
   interfaces: NetworkInterface[]
   bestInterfaceName?: string
   selectedInterfaceName?: string
+  isCapturing: boolean
 }
 
 export interface API {
@@ -12,6 +13,8 @@ export interface API {
   removeNetworkDataListener: () => void
   getNetworkInterfaces: () => Promise<InterfaceSelection>
   selectNetworkInterface: (interfaceName: string) => Promise<InterfaceSelection>
+  startCapture: () => Promise<InterfaceSelection>
+  stopCapture: () => Promise<InterfaceSelection>
 }
 
 export type { PacketMetadata }

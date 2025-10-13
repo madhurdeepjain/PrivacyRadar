@@ -47,13 +47,15 @@ export async function startApp(): Promise<void> {
       await switchAnalyzerInterface(interfaceName)
       return getInterfaceSelection()
     })
+    ipcMain.handle('network:startCapture', async () => {
+      await startAnalyzer()
+      return getInterfaceSelection()
+    })
+    ipcMain.handle('network:stopCapture', async () => {
+      stopAnalyzer()
+      return getInterfaceSelection()
+    })
     ipcHandlersRegistered = true
-  }
-
-  try {
-    await startAnalyzer()
-  } catch (error) {
-    logger.error('Failed to start network analyzer', error)
   }
 }
 

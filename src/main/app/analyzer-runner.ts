@@ -76,13 +76,15 @@ export function getInterfaceSelection(): {
   interfaces: NetworkInterface[]
   bestInterfaceName?: string
   selectedInterfaceName?: string
+  isCapturing: boolean
 } {
   const deviceInfo = refreshDeviceInfo()
   return {
     interfaces: deviceInfo.interfaces,
     bestInterfaceName: deviceInfo.bestInterface?.name,
     selectedInterfaceName:
-      currentInterfaceName ?? selectedInterfaceName ?? deviceInfo.bestInterface?.name
+      currentInterfaceName ?? selectedInterfaceName ?? deviceInfo.bestInterface?.name,
+    isCapturing: analyzer !== null
   }
 }
 
@@ -164,9 +166,12 @@ export async function switchAnalyzerInterface(interfaceName: string): Promise<vo
       const previousSelection = selectedInterfaceName
       selectedInterfaceName = interfaceName
 
-      if (analyzer) {
-        stopAnalyzer()
+      if (!analyzer) {
+        currentInterfaceName = null
+        return
       }
+
+      stopAnalyzer()
 
       try {
         await startAnalyzer(interfaceName)
@@ -181,4 +186,8 @@ export async function switchAnalyzerInterface(interfaceName: string): Promise<vo
     })
 
   return interfaceSwitchLock
+}
+
+export function isAnalyzerRunning(): boolean {
+  return analyzer !== null
 }

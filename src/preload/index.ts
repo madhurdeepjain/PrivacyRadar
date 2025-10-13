@@ -16,6 +16,12 @@ const api: API = {
   },
   selectNetworkInterface: async (interfaceName: string): Promise<InterfaceSelection> => {
     return ipcRenderer.invoke('network:selectInterface', interfaceName)
+  },
+  startCapture: async (): Promise<InterfaceSelection> => {
+    return ipcRenderer.invoke('network:startCapture')
+  },
+  stopCapture: async (): Promise<InterfaceSelection> => {
+    return ipcRenderer.invoke('network:stopCapture')
   }
 }
 
