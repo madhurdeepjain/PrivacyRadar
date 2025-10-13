@@ -1,6 +1,5 @@
 import { PacketMetadata, NetworkConnection, UDPPortMapping } from '@shared/interfaces/common'
 import { normalizeIPv6 } from '@shared/utils/address-normalizer'
-import { logger } from '@infra/logging'
 import { ProcessTracker } from './process-tracker'
 import { ConnectionTracker } from './connection-tracker'
 import { PacketConMatcher } from './packet-con-matcher'
@@ -76,8 +75,6 @@ export class ProcConManager {
 
     pkt.procName = mapping?.procName ?? 'UNKNOWN'
     if (mapping) mapping.lastSeen = Date.now()
-
-    logger.debug('Matched UDP packet', { pid: pkt.pid, procName: pkt.procName })
 
     this.packetQueue.push(pkt)
   }

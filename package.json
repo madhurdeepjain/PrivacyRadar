@@ -34,12 +34,10 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
-    "@types/node-netstat": "^1.8.4",
     "better-sqlite3": "^12.4.1",
     "cap": "^0.2.1",
     "drizzle-orm": "^0.44.5",
     "electron-updater": "^6.3.9",
-    "node-netstat": "^1.9.0",
     "pino": "^10.0.0",
     "ps-list": "^8.1.1"
   },

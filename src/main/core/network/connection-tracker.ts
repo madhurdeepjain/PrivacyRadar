@@ -1,4 +1,3 @@
-import netstat from 'node-netstat'
 import {
   CONNECTION_POLL_INTERVAL_MS,
   NETSTAT_TIMEOUT_MS,
@@ -7,19 +6,7 @@ import {
 import { logger } from '@infra/logging'
 import { NetworkConnection, UDPPortMapping } from '@shared/interfaces/common'
 import { normalizeIPv6 } from '@shared/utils/address-normalizer'
-
-type NetstatEndpoint = {
-  address?: string | null
-  port?: number
-}
-
-type NetstatRow = {
-  protocol?: string
-  local?: NetstatEndpoint
-  remote?: NetstatEndpoint
-  state?: string
-  pid?: number
-}
+import { collectNetstatRows } from './netstat-runner'
 
 export class ConnectionTracker {
   private connections: NetworkConnection[] = []
@@ -37,82 +24,72 @@ export class ConnectionTracker {
     const tcpMap: Map<string, { pid: number; procName: string; lastSeen: number }> = new Map()
 
     try {
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Netstat timeout')), NETSTAT_TIMEOUT_MS)
+      const rows = await collectNetstatRows({ timeoutMs: NETSTAT_TIMEOUT_MS })
 
-        netstat({}, (data) => {
-          const row = data as NetstatRow
-          if (!row) return
+      rows.forEach((row) => {
+        try {
+          const proto = (row.protocol ?? '').toUpperCase()
+          const localAddr = normalizeIPv6(row.local?.address ?? '')
+          const localPort = row.local?.port
+          const remoteAddr = row.remote?.address ? normalizeIPv6(row.remote.address) : undefined
+          const state = row.state ?? ''
 
-          try {
-            const proto = (row.protocol ?? '').toUpperCase()
-            const localAddr = normalizeIPv6(row.local?.address ?? '')
-            const localPort = row.local?.port
-            const remoteAddr = row.remote?.address ? normalizeIPv6(row.remote.address) : undefined
-            const state = row.state ?? ''
+          if (!localPort) return
+          if (this.isLoopback(localAddr) || (remoteAddr && this.isLoopback(remoteAddr))) return
 
-            if (!localPort || !row.pid) return
-            if (this.isLoopback(localAddr) || (remoteAddr && this.isLoopback(remoteAddr))) return
+          if (proto.startsWith('TCP')) {
+            connectionsList.push({
+              pid: row.pid,
+              procName: '',
+              srcaddr: localAddr,
+              srcport: localPort,
+              dstaddr: remoteAddr,
+              dstport: row.remote?.port ?? undefined,
+              protocol: proto,
+              state
+            })
 
-            if (proto.startsWith('TCP')) {
-              connectionsList.push({
+            if ((state === 'ESTABLISHED' || state === 'LISTENING') && row.pid) {
+              tcpMap.set(`${localAddr}:${localPort}`, {
                 pid: row.pid,
                 procName: '',
-                srcaddr: localAddr,
-                srcport: localPort,
-                dstaddr: remoteAddr,
-                dstport: row.remote?.port ?? undefined,
-                protocol: proto,
-                state
-              })
-
-              if (state === 'ESTABLISHED' || state === 'LISTENING') {
-                tcpMap.set(`${localAddr}:${localPort}`, {
-                  pid: row.pid,
-                  procName: '',
-                  lastSeen: Date.now()
-                })
-              }
-            } else if (proto.startsWith('UDP')) {
-              const isListener =
-                !remoteAddr || remoteAddr === '*' || remoteAddr === '0.0.0.0' || remoteAddr === '::'
-
-              const mapping: UDPPortMapping = {
-                port: localPort,
-                address: localAddr,
-                pid: row.pid,
-                procName: '',
-                lastSeen: Date.now(),
-                isListener
-              }
-
-              if (isListener) {
-                udpMap.set(`${localAddr}:${localPort}`, { ...mapping })
-                udpMap.set(`:${localPort}`, { ...mapping, address: '' })
-              } else {
-                udpMap.set(`${localAddr}:${localPort}`, mapping)
-              }
-
-              connectionsList.push({
-                pid: row.pid,
-                procName: '',
-                srcaddr: localAddr,
-                srcport: localPort,
-                dstaddr: remoteAddr,
-                dstport: row.remote?.port ?? undefined,
-                protocol: proto,
-                state: isListener ? 'LISTENING' : 'ESTABLISHED'
+                lastSeen: Date.now()
               })
             }
-          } catch (error) {
-            logger.debug('Skipping malformed netstat row', error)
-          }
-        })
+          } else if (proto.startsWith('UDP')) {
+            const isListener =
+              !remoteAddr || remoteAddr === '*' || remoteAddr === '0.0.0.0' || remoteAddr === '::'
 
-        setTimeout(() => {
-          clearTimeout(timeout)
-          resolve()
-        }, 100)
+            const mapping: UDPPortMapping = {
+              port: localPort,
+              address: localAddr,
+              pid: row.pid,
+              procName: '',
+              lastSeen: Date.now(),
+              isListener
+            }
+
+            if (isListener) {
+              udpMap.set(`${localAddr}:${localPort}`, { ...mapping })
+              udpMap.set(`:${localPort}`, { ...mapping, address: '' })
+            } else {
+              udpMap.set(`${localAddr}:${localPort}`, mapping)
+            }
+
+            connectionsList.push({
+              pid: row.pid,
+              procName: '',
+              srcaddr: localAddr,
+              srcport: localPort,
+              dstaddr: remoteAddr,
+              dstport: row.remote?.port ?? undefined,
+              protocol: proto,
+              state: isListener ? 'LISTENING' : 'ESTABLISHED'
+            })
+          }
+        } catch (error) {
+          logger.debug('Skipping malformed netstat row', error)
+        }
       })
 
       this.cleanupStale()
