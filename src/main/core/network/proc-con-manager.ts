@@ -3,13 +3,11 @@ import { normalizeIPv6 } from '@shared/utils/address-normalizer'
 import { ProcessTracker } from './process-tracker'
 import { ConnectionTracker } from './connection-tracker'
 import { PacketConMatcher } from './packet-con-matcher'
-
+import { systemPorts, systemProtocols } from '@main/config/constants'
 export class ProcConManager {
   private readonly matcher: PacketConMatcher = new PacketConMatcher()
   private packetQueue: PacketMetadata[] = []
   private readonly localIPs: Set<string>
-  private readonly systemProtocols = new Set(['ICMP', 'ICMPV6', 'IGMP', 'ARP'])
-  private readonly systemPorts = new Set([135, 137, 139, 445, 1900, 5355, 5353])
 
   constructor(
     private readonly processTracker: ProcessTracker,
@@ -95,7 +93,7 @@ export class ProcConManager {
   }
 
   private isSystemPacket(pkt: PacketMetadata): boolean {
-    if (this.systemProtocols.has(pkt.protocol || '')) return true
+    if (systemProtocols.has(pkt.protocol || '')) return true
     const srcIP = pkt.srcIP ?? ''
     const dstIP = pkt.dstIP ?? ''
 
@@ -105,7 +103,7 @@ export class ProcConManager {
     if (srcIP.startsWith('fe80:') || dstIP.startsWith('fe80:')) return true
     if (dstIP === '255.255.255.255') return true
 
-    if ((this.systemPorts.has(pkt.srcport ?? 0)) || (this.systemPorts.has(pkt.dstport ?? 0))) {
+    if ((systemPorts.has(pkt.srcport ?? 0)) || (systemPorts.has(pkt.dstport ?? 0))) {
       return true
     }
     return false
