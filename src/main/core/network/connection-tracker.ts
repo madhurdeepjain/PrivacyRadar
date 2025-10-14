@@ -30,9 +30,8 @@ export class ConnectionTracker {
         try {
           const rawProto = (row.protocol ?? '').toLowerCase()
           const hasIPv6Addr = row.local?.address?.includes(':') || row.remote?.address?.includes(':')
-          const isIPv6 = rawProto === 'tcp6' || (rawProto === 'udp' && hasIPv6Addr)
+          const isIPv6 = (rawProto === 'tcp' && hasIPv6Addr) || (rawProto === 'udp' && hasIPv6Addr)
 
-          // Use wildcard for null addresses (LISTENING on all interfaces)
           const localAddr = row.local?.address 
             ? normalizeIPv6(row.local.address) 
             : (isIPv6 ? '::' : '0.0.0.0')
@@ -79,9 +78,7 @@ export class ConnectionTracker {
             if (isListener) {
               udpMap.set(`${localAddr}:${localPort}`, { ...mapping })
               udpMap.set(`:${localPort}`, { ...mapping, address: '*' })
-            } else {
-              udpMap.set(`${localAddr}:${localPort}`, mapping)
-            }
+            } 
 
             connectionsList.push({
               pid: row.pid,

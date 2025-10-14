@@ -53,6 +53,7 @@ export class ProcConManager {
       return
     }
     if (!pkt.protocol?.startsWith('UDP')) {
+
       const conn = this.matcher.matchPacketToCon(pkt)
 
       if (conn) {
@@ -67,7 +68,7 @@ export class ProcConManager {
         if (dstIsLocal && pkt.dstIP && pkt.dstport) {
           info = tcpMap.get(`${pkt.dstIP}:${pkt.dstport}`)
           if (!info) {
-            const wildcard = pkt.dstIP.includes(':') ? '::' : '0.0.0.0'
+            const wildcard = pkt.dstIP.includes(':') ? '0000:0000:0000:0000:0000:0000:0000:0000' : '0.0.0.0'
             info = tcpMap.get(`${wildcard}:${pkt.dstport}`)
           }
         }
@@ -75,7 +76,7 @@ export class ProcConManager {
         if (!info && srcIsLocal && pkt.srcIP && pkt.srcport) {
           info = tcpMap.get(`${pkt.srcIP}:${pkt.srcport}`)
           if (!info) {
-            const wildcard = pkt.srcIP.includes(':') ? '::' : '0.0.0.0'
+            const wildcard = pkt.srcIP.includes(':') ? '0000:0000:0000:0000:0000:0000:0000:0000' : '0.0.0.0'
             info = tcpMap.get(`${wildcard}:${pkt.srcport}`)
           }
         }

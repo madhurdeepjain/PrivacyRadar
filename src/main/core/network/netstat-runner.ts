@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { logger } from '@infra/logging'
+import { normalizeIPv6 } from '@main/shared/utils/address-normalizer'
 
 export type NetstatEndpoint = {
   address?: string | null
@@ -161,10 +162,17 @@ function parseDataLine(line: string, headerLayout: HeaderLayout | null): Netstat
   const pidColumn = pidRaw?.split(/ {2,}/)[0]
   const pid = parsePid(pidColumn)
 
+  const localEndpoint = parseEndpoint(localRaw.trim())
+  const remoteEndpoint = parseEndpoint(remoteRaw.trim())
+
   return {
     protocol,
-    local: parseEndpoint(localRaw.trim()),
-    remote: parseEndpoint(remoteRaw.trim()),
+    local: localEndpoint
+      ? { ...localEndpoint, address: localEndpoint.address ? normalizeIPv6(localEndpoint.address) : localEndpoint.address }
+      : undefined,
+    remote: remoteEndpoint
+      ? { ...remoteEndpoint, address: remoteEndpoint.address ? normalizeIPv6(remoteEndpoint.address) : remoteEndpoint.address }
+      : undefined,
     state,
     pid
   }

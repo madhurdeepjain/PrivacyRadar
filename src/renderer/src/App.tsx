@@ -104,7 +104,7 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     const handleNetworkData = (data: PacketData[]): void => {
-      setPacketCount((prev) => prev + 1)
+      setPacketCount((prev) => prev + data.length)
       setPackets((prev) => [...data, ...prev].slice(0, 500)) // Keep last 500 packets
       setTotalBytes((prev) => prev + data.reduce((acc, pkt) => acc + pkt.size, 0))
       setLastPacketTimestamp(data[data.length - 1].timestamp)

@@ -23,7 +23,7 @@ export class NetworkAnalyzer {
   private connectionSyncTimer: NodeJS.Timeout | null = null
   private readonly onPacketMatched: (pkt: PacketMetadata[]) => void
   private unmatchedQueue: Array<{ pkt: PacketMetadata; count: number}> = []
-  private readonly MAX_RETRIES = 3
+  private readonly MAX_RETRIES = 9
 
   constructor(deviceName: string, localIPs: string[], onPacket: (pkt: PacketMetadata[]) => void) {
     this.processTracker = new ProcessTracker()
@@ -48,7 +48,7 @@ export class NetworkAnalyzer {
       const allPackets = [
         ...newPackets.map(pkt => ({ pkt, count: 0})),
         ...this.unmatchedQueue
-      ]
+     ]
       this.unmatchedQueue = []
       if (allPackets.length === 0) return
 
