@@ -28,10 +28,9 @@ export class ProcConManager {
       }
     })
 
-    const tcpConMap = this.connectionTracker.getTCPConMap()
-    tcpConMap.forEach((info) => {
-      if (info.pid && !info.procName) {
-        info.procName = this.processTracker.getProcessName(info.pid) ?? 'UNKNOWN'
+    this.connectionTracker.getTCPConMap().forEach((mapping) => {
+      if (mapping.pid && !mapping.procName) {
+        mapping.procName = this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN'
       }
     })
 
@@ -58,7 +57,7 @@ export class ProcConManager {
 
       if (conn) {
         pkt.pid = conn?.pid
-        pkt.procName = conn?.procName ?? 'UNKNOWN'
+        pkt.procName = conn?.procName ?? 'UNKNOWN-Valid-Connection'
       } else {
         const srcIsLocal = this.localIPs.has(pkt.srcIP ?? '')
         const dstIsLocal = this.localIPs.has(pkt.dstIP ?? '')
