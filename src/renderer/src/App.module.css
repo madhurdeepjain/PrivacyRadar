@@ -12,7 +12,12 @@
   flex-direction: column;
   width: 320px;
   padding: 32px 28px 24px;
-  background: linear-gradient(180deg, rgba(17, 24, 39, 0.95) 0%, rgba(15, 23, 42, 0.98) 60%, rgba(15, 23, 42, 1) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(17, 24, 39, 0.95) 0%,
+    rgba(15, 23, 42, 0.98) 60%,
+    rgba(15, 23, 42, 1) 100%
+  );
   border-right: 1px solid rgba(148, 163, 184, 0.15);
   gap: 28px;
   overflow-y: auto;
@@ -278,7 +283,12 @@
   flex-direction: column;
   gap: 32px;
   padding: 36px 40px;
-  background: linear-gradient(180deg, rgba(10, 12, 22, 0.88) 0%, rgba(11, 26, 44, 0.92) 55%, rgba(9, 9, 16, 0.95) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(10, 12, 22, 0.88) 0%,
+    rgba(11, 26, 44, 0.92) 55%,
+    rgba(9, 9, 16, 0.95) 100%
+  );
 }
 
 .mainHeader {
