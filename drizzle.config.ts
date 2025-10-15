@@ -6,6 +6,6 @@ export default {
   out: './drizzle',
   dialect: 'sqlite',
   dbCredentials: {
-    url: join(__dirname, 'dev-data', 'dev.db')
+    url: join(__dirname, '.dev-data', 'dev.db')
   }
 } satisfies Config
