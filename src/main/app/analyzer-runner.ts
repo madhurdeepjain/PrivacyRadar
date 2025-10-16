@@ -14,8 +14,8 @@ let writer: PacketWriter | null = null
 let snapshotInterval: NodeJS.Timeout | null = null
 let mainWindow: BrowserWindow | null = null
 let deviceInfoCache: Device | null = null
-let selectedInterfaceName: string | null = null
-let currentInterfaceName: string | null = null
+let selectedInterfaceNames: string[] = []
+let activeInterfaceNames: string[] = []
 let interfaceSwitchLock: Promise<void> = Promise.resolve()
 
 function setupPeriodicTasks(
@@ -44,58 +44,102 @@ export function setMainWindow(window: BrowserWindow): void {
   mainWindow = window
 }
 
+function ensureSelectionInSync(deviceInfo: Device): void {
+  const availableNames = new Set(deviceInfo.interfaces.map((iface) => iface.name))
+  const filtered = selectedInterfaceNames.filter((name) => availableNames.has(name))
+
+  if (filtered.length === 0 && deviceInfo.interfaces.length > 0) {
+    selectedInterfaceNames = deviceInfo.interfaces.map((iface) => iface.name)
+    return
+  }
+
+  if (filtered.length !== selectedInterfaceNames.length) {
+    selectedInterfaceNames = filtered
+  }
+}
+
+function applySelectedInterfaces(deviceInfo: Device, interfaceNames?: string[]): void {
+  const availableNames = new Set(deviceInfo.interfaces.map((iface) => iface.name))
+
+  if (!interfaceNames || interfaceNames.length === 0) {
+    selectedInterfaceNames = deviceInfo.interfaces.map((iface) => iface.name)
+    return
+  }
+
+  const normalized: string[] = []
+
+  interfaceNames.forEach((name) => {
+    if (!availableNames.has(name)) {
+      return
+    }
+
+    if (!normalized.includes(name)) {
+      normalized.push(name)
+    }
+  })
+
+  if (normalized.length === 0) {
+    throw new Error('No valid network interfaces selected')
+  }
+
+  selectedInterfaceNames = normalized
+}
+
 function refreshDeviceInfo(): Device {
   deviceInfoCache = getDeviceInfo()
   setBestInterfaceInfo(deviceInfoCache)
-
-  if (!selectedInterfaceName && deviceInfoCache.bestInterface) {
-    selectedInterfaceName = deviceInfoCache.bestInterface.name
-  }
+  ensureSelectionInSync(deviceInfoCache)
 
   return deviceInfoCache
 }
 
-function resolveInterface(deviceInfo: Device, interfaceName?: string): NetworkInterface {
-  const requestedName = interfaceName ?? selectedInterfaceName ?? deviceInfo.bestInterface?.name
+function getInterfacesForCapture(deviceInfo: Device): NetworkInterface[] {
+  const selectedSet = new Set(selectedInterfaceNames)
+  const matches = deviceInfo.interfaces.filter((iface) => selectedSet.has(iface.name))
 
-  if (!requestedName) {
+  if (matches.length === 0) {
     throw new Error('No suitable network interface found')
   }
 
-  const target = deviceInfo.interfaces.find((iface) => iface.name === requestedName)
-
-  if (!target) {
-    throw new Error(`Network interface ${requestedName} not found`)
-  }
-
-  selectedInterfaceName = requestedName
-  return target
+  return matches
 }
 
 export function getInterfaceSelection(): {
   interfaces: NetworkInterface[]
   bestInterfaceName?: string
-  selectedInterfaceName?: string
+  selectedInterfaceNames: string[]
   isCapturing: boolean
+  activeInterfaceNames: string[]
 } {
   const deviceInfo = refreshDeviceInfo()
+
   return {
     interfaces: deviceInfo.interfaces,
     bestInterfaceName: deviceInfo.bestInterface?.name,
-    selectedInterfaceName:
-      currentInterfaceName ?? selectedInterfaceName ?? deviceInfo.bestInterface?.name,
-    isCapturing: analyzer !== null
+    selectedInterfaceNames: [...selectedInterfaceNames],
+    isCapturing: analyzer !== null,
+    activeInterfaceNames: [...activeInterfaceNames]
   }
 }
 
-export async function startAnalyzer(interfaceName?: string): Promise<void> {
+export async function startAnalyzer(interfaceNames?: string | string[]): Promise<void> {
   const deviceInfo = refreshDeviceInfo()
-  const selectedInterface = resolveInterface(deviceInfo, interfaceName)
+
+  if (Array.isArray(interfaceNames)) {
+    applySelectedInterfaces(deviceInfo, interfaceNames)
+  } else if (interfaceNames) {
+    applySelectedInterfaces(deviceInfo, [interfaceNames])
+  } else {
+    ensureSelectionInSync(deviceInfo)
+  }
 
   if (analyzer) {
-    logger.debug('Network analyzer already running', { interface: currentInterfaceName })
+    logger.debug('Network analyzer already running', { interfaces: activeInterfaceNames })
     return
   }
+
+  const interfacesToCapture = getInterfacesForCapture(deviceInfo)
+  const interfaceNamesToCapture = interfacesToCapture.map((iface) => iface.name)
 
   const localIPs = deviceInfo.interfaces
     .flatMap((iface) => iface.addresses)
@@ -108,10 +152,14 @@ export async function startAnalyzer(interfaceName?: string): Promise<void> {
     writer = null
   }
 
-  analyzer = new NetworkAnalyzer(selectedInterface.name, localIPs, (pkt) => {
-    writer?.writePacket(pkt)
-    sendDataToFrontend(pkt)
-  })
+  analyzer = new NetworkAnalyzer(
+    interfaceNamesToCapture.length === 1 ? interfaceNamesToCapture[0] : interfaceNamesToCapture,
+    localIPs,
+    (pkt) => {
+      writer?.writePacket(pkt)
+      sendDataToFrontend(pkt)
+    }
+  )
 
   try {
     await analyzer.start()
@@ -119,16 +167,16 @@ export async function startAnalyzer(interfaceName?: string): Promise<void> {
     writer?.close()
     writer = null
     analyzer = null
-    currentInterfaceName = null
+    activeInterfaceNames = []
     throw error
   }
 
-  currentInterfaceName = selectedInterface.name
+  activeInterfaceNames = interfaceNamesToCapture
   setupPeriodicTasks(analyzer, writer)
   if (!writer) {
     logger.info('Packet persistence disabled (production mode)')
   }
-  logger.info('Network analyzer started', { interface: selectedInterface.name })
+  logger.info('Network analyzer started', { interfaces: interfaceNamesToCapture })
 }
 
 export function stopAnalyzer(): void {
@@ -142,45 +190,60 @@ export function stopAnalyzer(): void {
   analyzer?.stop()
   writer = null
   analyzer = null
-  currentInterfaceName = null
+  activeInterfaceNames = []
   logger.info('Network analyzer stopped')
 }
 
-export async function switchAnalyzerInterface(interfaceName: string): Promise<void> {
+export async function updateAnalyzerInterfaces(interfaceNames: string[] = []): Promise<void> {
   interfaceSwitchLock = interfaceSwitchLock
     .catch(() => undefined)
     .then(async () => {
       const deviceInfo = refreshDeviceInfo()
-      const target = deviceInfo.interfaces.find((iface) => iface.name === interfaceName)
+      const wasRunning = analyzer !== null
+      const previousSelection = [...selectedInterfaceNames]
+      const previousActive = [...activeInterfaceNames]
 
-      if (!target) {
-        throw new Error(`Network interface ${interfaceName} not found`)
-      }
+      applySelectedInterfaces(deviceInfo, interfaceNames)
 
-      if (currentInterfaceName === interfaceName && analyzer) {
-        logger.debug('Requested interface already active', { interface: interfaceName })
-        selectedInterfaceName = interfaceName
+      const previousSet = new Set(previousSelection)
+      const currentSet = new Set(selectedInterfaceNames)
+      const selectionChanged =
+        previousSet.size !== currentSet.size ||
+        selectedInterfaceNames.some((name) => !previousSet.has(name))
+
+      if (!selectionChanged) {
+        if (!wasRunning) {
+          activeInterfaceNames = []
+        }
         return
       }
 
-      const previousSelection = selectedInterfaceName
-      selectedInterfaceName = interfaceName
-
-      if (!analyzer) {
-        currentInterfaceName = null
+      if (!wasRunning) {
+        activeInterfaceNames = []
         return
       }
 
       stopAnalyzer()
 
       try {
-        await startAnalyzer(interfaceName)
+        await startAnalyzer()
       } catch (error) {
-        selectedInterfaceName = previousSelection
-        logger.error('Failed to switch network analyzer interface', {
-          interface: interfaceName,
+        selectedInterfaceNames = previousSelection
+        activeInterfaceNames = previousActive
+        logger.error('Failed to update network analyzer interface selection', {
+          interfaces: interfaceNames,
           error
         })
+
+        try {
+          await startAnalyzer()
+        } catch (restoreError) {
+          logger.error('Failed to restore previous network analyzer interface selection', {
+            interfaces: previousSelection,
+            error: restoreError
+          })
+        }
+
         throw error
       }
     })

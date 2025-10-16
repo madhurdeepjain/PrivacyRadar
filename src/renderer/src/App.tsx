@@ -24,6 +24,7 @@ interface PacketData {
   timestamp: number
   srcPortService?: string
   dstPortService?: string
+  interfaceName?: string
   ipv4?: {
     srcaddr: string
     dstaddr: string
@@ -61,30 +62,143 @@ function App(): React.JSX.Element {
   const [isCapturing, setIsCapturing] = useState(false)
   const [isUpdatingCapture, setIsUpdatingCapture] = useState(false)
   const [interfaces, setInterfaces] = useState<InterfaceOption[]>([])
-  const [selectedInterface, setSelectedInterface] = useState('')
+  const [selectedInterfaces, setSelectedInterfaces] = useState<string[]>([])
   const [isSwitchingInterface, setIsSwitchingInterface] = useState(false)
   const [interfaceError, setInterfaceError] = useState<string | null>(null)
   const [captureError, setCaptureError] = useState<string | null>(null)
   const activityListRef = useRef<HTMLDivElement>(null)
 
-  const resetCaptureState = (): void => {
-    setPackets([])
-    setPacketCount(0)
-    setTotalBytes(0)
-    setAppStatsMap({})
-    setLastPacketTimestamp(undefined)
-    throughputSamplesRef.current = []
-    setBytesPerSecond(0)
+  const getInterfaceCategory = (iface: InterfaceOption): string => {
+    const name = iface.name.toLowerCase()
+    const description = (iface.description || '').toLowerCase()
+    const friendly = (iface.friendlyName || '').toLowerCase()
+
+    if (
+      name.startsWith('lo') ||
+      description.includes('loopback') ||
+      friendly.includes('loopback')
+    ) {
+      return 'Loopback'
+    }
+
+    if (
+      description.includes('wi-fi') ||
+      description.includes('wifi') ||
+      description.includes('wireless') ||
+      friendly.includes('wi-fi') ||
+      friendly.includes('wifi') ||
+      friendly.includes('wireless')
+    ) {
+      return 'Wi-Fi & Wireless'
+    }
+
+    if (
+      name.startsWith('en') ||
+      description.includes('ethernet') ||
+      description.includes('lan') ||
+      friendly.includes('ethernet') ||
+      friendly.includes('lan')
+    ) {
+      return 'Ethernet & Wired'
+    }
+
+    if (
+      description.includes('virtual') ||
+      description.includes('vmware') ||
+      description.includes('hyper-v') ||
+      description.includes('vpn') ||
+      description.includes('tunnel') ||
+      description.includes('pseudo') ||
+      friendly.includes('virtual') ||
+      friendly.includes('vpn') ||
+      friendly.includes('tunnel')
+    ) {
+      return 'Virtual & Tunnels'
+    }
+
+    return 'Other'
   }
+
+  const groupedInterfaces = useMemo(() => {
+    const groups: Record<string, InterfaceOption[]> = {}
+    interfaces.forEach((iface) => {
+      const category = getInterfaceCategory(iface)
+      if (!groups[category]) {
+        groups[category] = []
+      }
+      groups[category].push(iface)
+    })
+    return groups
+  }, [interfaces])
+
+  const orderedInterfaceGroups = useMemo(() => {
+    const priority = [
+      'Wi-Fi & Wireless',
+      'Ethernet & Wired',
+      'Loopback',
+      'Virtual & Tunnels',
+      'Other'
+    ]
+    const entries: Array<[string, InterfaceOption[]]> = []
+
+    priority.forEach((category) => {
+      const list = groupedInterfaces[category]
+      if (list && list.length > 0) {
+        entries.push([category, list])
+      }
+    })
+
+    Object.entries(groupedInterfaces).forEach(([category, list]) => {
+      if (priority.includes(category)) {
+        return
+      }
+      entries.push([category, list])
+    })
+
+    return entries
+  }, [groupedInterfaces])
+
+  const interfaceCategoryMap = useMemo(() => {
+    const map: Record<string, { category: string; label: string }> = {}
+    interfaces.forEach((iface) => {
+      map[iface.name] = {
+        category: getInterfaceCategory(iface),
+        label: iface.friendlyName || iface.description || iface.name
+      }
+    })
+    return map
+  }, [interfaces])
+
+  const selectionSummary = useMemo(() => {
+    if (interfaces.length === 0) {
+      return 'No interfaces detected'
+    }
+
+    if (selectedInterfaces.length === interfaces.length) {
+      return 'All interfaces selected'
+    }
+
+    if (selectedInterfaces.length === 1) {
+      const match = interfaces.find((iface) => iface.name === selectedInterfaces[0])
+      if (match) {
+        const label = match.friendlyName || match.description || match.name
+        return `Selected ${label}`
+      }
+      return '1 interface selected'
+    }
+
+    return `${selectedInterfaces.length} interfaces selected`
+  }, [interfaces, selectedInterfaces])
 
   const applyInterfaceSelection = (selection: InterfaceSelectionResult): void => {
     setInterfaces(selection.interfaces)
-    setSelectedInterface(
-      selection.selectedInterfaceName ||
-        selection.bestInterfaceName ||
-        selection.interfaces[0]?.name ||
-        ''
-    )
+
+    const nextSelection =
+      selection.selectedInterfaceNames.length > 0
+        ? selection.selectedInterfaceNames
+        : selection.interfaces.map((iface) => iface.name)
+
+    setSelectedInterfaces(nextSelection)
     setIsCapturing(Boolean(selection.isCapturing))
   }
 
@@ -247,25 +361,43 @@ function App(): React.JSX.Element {
     return new Date(timestamp).toLocaleTimeString()
   }
 
-  const handleInterfaceChange = async (
-    event: React.ChangeEvent<HTMLSelectElement>
-  ): Promise<void> => {
-    const nextInterface = event.target.value
-    setSelectedInterface(nextInterface)
+  const submitInterfaceSelection = async (nextInterfaces: string[]): Promise<void> => {
+    const previousSelection = selectedInterfaces
     setIsSwitchingInterface(true)
     setInterfaceError(null)
     setCaptureError(null)
 
     try {
-      const selection = await window.api.selectNetworkInterface(nextInterface)
+      const selection = await window.api.selectNetworkInterface(nextInterfaces)
       applyInterfaceSelection(selection)
-      resetCaptureState()
     } catch (error) {
-      console.error('Failed to switch network interface', error)
-      setInterfaceError('Unable to switch interface')
+      console.error('Failed to update network interface selection', error)
+      setInterfaceError('Unable to update interface selection')
+      setSelectedInterfaces(previousSelection)
     } finally {
       setIsSwitchingInterface(false)
     }
+  }
+
+  const handleInterfaceToggle = async (interfaceName: string, checked: boolean): Promise<void> => {
+    const nextSelection = checked
+      ? Array.from(new Set([...selectedInterfaces, interfaceName]))
+      : selectedInterfaces.filter((name) => name !== interfaceName)
+
+    if (nextSelection.length === 0) {
+      setInterfaceError('Select at least one interface')
+      return
+    }
+
+    setSelectedInterfaces(nextSelection)
+    await submitInterfaceSelection(nextSelection)
+  }
+
+  const handleSelectAll = async (): Promise<void> => {
+    if (interfaces.length === 0) return
+    const allNames = interfaces.map((iface) => iface.name)
+    setSelectedInterfaces(allNames)
+    await submitInterfaceSelection(allNames)
   }
 
   const handleToggleCapture = async (): Promise<void> => {
@@ -313,214 +445,302 @@ function App(): React.JSX.Element {
     return `${primaryLabel} (${detailParts.join(' · ')})`
   }
 
+  const getPacketInterfaceCategory = (packet: PacketData): string => {
+    if (!packet.interfaceName) {
+      return 'Unknown interface'
+    }
+
+    return interfaceCategoryMap[packet.interfaceName]?.category ?? 'Other interface'
+  }
+
+  const getPacketInterfaceLabel = (packet: PacketData): string => {
+    if (!packet.interfaceName) {
+      return 'Interface not reported'
+    }
+
+    return interfaceCategoryMap[packet.interfaceName]?.label ?? packet.interfaceName
+  }
+
   return (
-    <div className={styles.page}>
-      <header className={styles.topBar}>
-        <div className={styles.brand}>
+    <div className={styles.shell}>
+      <aside className={styles.navRail}>
+        <div className={styles.brandBlock}>
           <img alt="PrivacyRadar" className={styles.brandMark} src={logo} />
-          <div>
-            <h1 className={styles.brandTitle}>PrivacyRadar</h1>
-            <p className={styles.brandSubtitle}>Real-time network intelligence</p>
+          <div className={styles.brandCopy}>
+            <span className={styles.brandName}>PrivacyRadar</span>
+            <span className={styles.brandTagline}>Live network awareness</span>
           </div>
         </div>
-        <div className={styles.capturePanel}>
-          <div className={styles.interfaceSelector}>
-            <label className={styles.interfaceLabel} htmlFor="interface-select">
-              Capturing on
-            </label>
-            <select
-              id="interface-select"
-              className={styles.interfaceSelect}
-              value={selectedInterface}
-              onChange={handleInterfaceChange}
-              disabled={interfaces.length === 0 || isSwitchingInterface || isUpdatingCapture}
-            >
-              {interfaces.length === 0 ? (
-                <option value="">No interfaces available</option>
-              ) : (
-                interfaces.map((iface) => (
-                  <option key={iface.name} value={iface.name}>
-                    {renderInterfaceOptionLabel(iface)}
-                  </option>
-                ))
-              )}
-            </select>
-            {isSwitchingInterface && (
-              <span className={styles.interfaceStatus}>Switching interface...</span>
-            )}
-            {interfaceError && <span className={styles.interfaceError}>{interfaceError}</span>}
-          </div>
-          <div className={styles.captureControls}>
-            <button
-              type="button"
-              className={`${styles.captureButton} ${
-                isCapturing ? styles.captureButtonPause : styles.captureButtonStart
-              }`}
-              onClick={handleToggleCapture}
-              disabled={interfaces.length === 0 || isSwitchingInterface || isUpdatingCapture}
-            >
-              {isUpdatingCapture
-                ? isCapturing
-                  ? 'Pausing capture...'
-                  : 'Starting capture...'
-                : isCapturing
-                  ? 'Pause capture'
-                  : 'Start capture'}
-            </button>
-            <span className={styles.captureHint}>
-              {isUpdatingCapture
-                ? isCapturing
-                  ? 'Pausing capture'
-                  : 'Starting capture'
-                : isCapturing
-                  ? 'Capturing live traffic'
-                  : 'Capture paused'}
-            </span>
-            {captureError && <span className={styles.captureError}>{captureError}</span>}
-          </div>
-        </div>
-        <div className={`${styles.liveBadge} ${!isCapturing ? styles.liveBadgePaused : ''}`}>
-          <span
-            className={`${styles.liveDot} ${!isCapturing ? styles.liveDotPaused : ''}`}
-            aria-hidden
-          />
-          {isUpdatingCapture
-            ? 'Updating capture...'
-            : isCapturing
-              ? packets.length > 0
-                ? 'Streaming now'
-                : 'Capturing...'
-              : 'Capture paused'}
-        </div>
-      </header>
 
-      <section className={styles.metricStrip}>
-        <article className={styles.metricCard}>
-          <span className={styles.metricLabel}>Total packets captured</span>
-          <span className={styles.metricValue}>{packetCount.toLocaleString()}</span>
-          <span className={styles.metricHint}>
-            Last update {formatTimeAgo(summary.lastPacketTimestamp)}
+        <div className={styles.captureBlock}>
+          <button
+            type="button"
+            className={`${styles.captureButton} ${
+              isCapturing ? styles.captureButtonActive : styles.captureButtonIdle
+            }`}
+            onClick={handleToggleCapture}
+            disabled={interfaces.length === 0 || isSwitchingInterface || isUpdatingCapture}
+          >
+            {isUpdatingCapture
+              ? isCapturing
+                ? 'Pausing capture...'
+                : 'Starting capture...'
+              : isCapturing
+                ? 'Pause capture'
+                : 'Start capture'}
+          </button>
+          <span className={styles.captureState}>
+            {isUpdatingCapture
+              ? isCapturing
+                ? 'Pausing capture'
+                : 'Starting capture'
+              : isCapturing
+                ? 'Capturing live traffic'
+                : 'Capture paused'}
           </span>
-        </article>
-        <article className={styles.metricCard}>
-          <span className={styles.metricLabel}>Active applications</span>
-          <span className={styles.metricValue}>{summary.uniqueApps.toLocaleString()}</span>
-          <span className={styles.metricHint}>Since capture started</span>
-        </article>
-        <article className={styles.metricCard}>
-          <span className={styles.metricLabel}>Throughput (30s avg)</span>
-          <span className={styles.metricValue}>{formatRate(summary.bytesPerSecond)}</span>
-          <span className={styles.metricHint}>Recent transfer rate</span>
-        </article>
-        <article className={styles.metricCard}>
-          <span className={styles.metricLabel}>Data observed</span>
-          <span className={styles.metricValue}>{formatBytes(summary.totalBytes)}</span>
-          <span className={styles.metricHint}>Since capture started</span>
-        </article>
-      </section>
+          {captureError && <span className={styles.errorText}>{captureError}</span>}
+        </div>
 
-      <main className={styles.dashboardGrid}>
-        <section className={styles.activityCard}>
-          <div className={styles.cardHeader}>
+        <div className={styles.interfaceSection}>
+          <div className={styles.sectionHeading}>
             <div>
-              <h2 className={styles.cardTitle}>Live traffic</h2>
+              <span className={styles.sectionLabel} id="interface-select">
+                Interfaces
+              </span>
+              <span className={styles.sectionSummary}>{selectionSummary}</span>
             </div>
-            <span className={styles.pill}>All packets</span>
           </div>
-          {packets.length === 0 ? (
-            <div className={styles.emptyState}>
-              <span className={styles.emptyIcon}>📡</span>
-              <span>Listening for network activity…</span>
-            </div>
+          {interfaces.length === 0 ? (
+            <div className={styles.interfaceEmpty}>No interfaces detected</div>
           ) : (
-            <div className={styles.activityList} ref={activityListRef}>
-              {[...packets].reverse().map((packet, index) => (
-                <article
-                  key={`${packet.timestamp}-${index}`}
-                  className={`${styles.packetRow} ${index === packets.length - 1 ? styles.packetRowNew : ''}`}
-                >
-                  <div className={styles.packetRowHeader}>
-                    <div className={styles.packetIdentity}>
-                      <span className={styles.packetName}>{packet.procName || 'Unknown app'}</span>
-                      <span className={styles.packetMeta}>PID {packet.pid ?? 'N/A'}</span>
-                    </div>
-                    <span className={styles.timestamp}>
-                      {new Date(packet.timestamp).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <div className={styles.packetRoute}>
-                    <span className={styles.routeEndpoint}>
-                      {getSourceIP(packet)}:{getSourcePort(packet)}
-                    </span>
-                    <span className={styles.routeDivider} aria-hidden>
-                      →
-                    </span>
-                    <span className={styles.routeEndpoint}>
-                      {getDestIP(packet)}:{getDestPort(packet)}
-                    </span>
-                  </div>
-                  <div className={styles.packetChips}>
-                    <span className={styles.protocolChip}>{packet.protocol || 'Unknown'}</span>
-                    <span className={styles.sizeChip}>{formatBytes(packet.size)}</span>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
+            <>
+              {isSwitchingInterface && (
+                <span className={styles.sectionNote}>Updating selection...</span>
+              )}
+              {interfaceError && <span className={styles.errorText}>{interfaceError}</span>}
+              <div className={styles.interfaceList} role="group" aria-labelledby="interface-select">
+                {orderedInterfaceGroups.map(([category, items]) => {
+                  const selectedCount = items.filter((iface) =>
+                    selectedInterfaces.includes(iface.name)
+                  ).length
 
-        <section className={styles.appsCard}>
-          <div className={styles.cardHeader}>
-            <div>
-              <h2 className={styles.cardTitle}>Application insights</h2>
-              <p className={styles.cardSubtitle}>Most active processes</p>
-            </div>
-            <span className={`${styles.pill} ${styles.appsPill}`}>
-              {summary.uniqueApps.toLocaleString()} active
+                  return (
+                    <div key={category} className={styles.interfaceGroup}>
+                      <div className={styles.interfaceGroupHeader}>
+                        <span>{category}</span>
+                        <span>
+                          {selectedCount}/{items.length}
+                        </span>
+                      </div>
+                      <ul className={styles.interfaceGroupList}>
+                        {items.map((iface) => {
+                          const checked = selectedInterfaces.includes(iface.name)
+                          return (
+                            <li key={iface.name} className={styles.interfaceGroupItem}>
+                              <label className={styles.interfaceCheckboxLabel}>
+                                <input
+                                  type="checkbox"
+                                  className={styles.interfaceCheckbox}
+                                  checked={checked}
+                                  disabled={isSwitchingInterface || isUpdatingCapture}
+                                  onChange={async (event) => {
+                                    await handleInterfaceToggle(iface.name, event.target.checked)
+                                  }}
+                                />
+                                <span>{renderInterfaceOptionLabel(iface)}</span>
+                              </label>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  )
+                })}
+              </div>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={handleSelectAll}
+                disabled={
+                  isSwitchingInterface ||
+                  isUpdatingCapture ||
+                  selectedInterfaces.length === interfaces.length
+                }
+              >
+                Select all
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className={styles.railSpacer} />
+
+        <div className={styles.railFooter}>
+          <Versions />
+        </div>
+      </aside>
+
+      <div className={styles.mainArea}>
+        <header className={styles.mainHeader}>
+          <div>
+            <h1 className={styles.pageTitle}>Network operations</h1>
+            <p className={styles.pageSubtitle}>Monitor live packet flow and application activity</p>
+          </div>
+          <div className={`${styles.liveBadge} ${!isCapturing ? styles.liveBadgeMuted : ''}`}>
+            <span
+              className={`${styles.liveDot} ${!isCapturing ? styles.liveDotMuted : ''}`}
+              aria-hidden
+            />
+            {isUpdatingCapture
+              ? 'Updating capture...'
+              : isCapturing
+                ? packets.length > 0
+                  ? 'Streaming now'
+                  : 'Capturing...'
+                : 'Capture paused'}
+          </div>
+        </header>
+
+        <section className={styles.summaryGrid}>
+          <article className={styles.summaryCard}>
+            <span className={styles.summaryLabel}>Packets captured</span>
+            <span className={styles.summaryValue}>{packetCount.toLocaleString()}</span>
+            <span className={styles.summaryMeta}>
+              Last update {formatTimeAgo(summary.lastPacketTimestamp)}
             </span>
-          </div>
-          {topApps.length === 0 ? (
-            <div className={styles.emptyState}>
-              <span className={styles.emptyIcon}>💤</span>
-              <span>No application traffic detected yet.</span>
-            </div>
-          ) : (
-            <div className={styles.appsList}>
-              {topApps.map((app, index) => (
-                <article key={`${app.name}-${app.pid ?? 'N/A'}-${index}`} className={styles.appRow}>
-                  <div className={styles.appIdentity}>
-                    <span className={styles.appRank}>{index + 1}</span>
-                    <div>
-                      <span className={styles.appName}>{app.name}</span>
-                      <span className={styles.appMeta}>PID {app.pid ?? 'N/A'}</span>
-                    </div>
-                  </div>
-                  <div className={styles.appMetrics}>
-                    <div>
-                      <span className={styles.appMetricValue}>
-                        {app.packetCount.toLocaleString()}
-                      </span>
-                      <span className={styles.appMetricCaption}>packets</span>
-                    </div>
-                    <div>
-                      <span className={styles.appMetricValue}>{formatBytes(app.totalBytes)}</span>
-                      <span className={styles.appMetricCaption}>data</span>
-                    </div>
-                    <div>
-                      <span className={styles.appMetricValue}>{formatTimeAgo(app.lastSeen)}</span>
-                      <span className={styles.appMetricCaption}>last seen</span>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+          </article>
+          <article className={styles.summaryCard}>
+            <span className={styles.summaryLabel}>Active applications</span>
+            <span className={styles.summaryValue}>{summary.uniqueApps.toLocaleString()}</span>
+            <span className={styles.summaryMeta}>Since session start</span>
+          </article>
+          <article className={styles.summaryCard}>
+            <span className={styles.summaryLabel}>Throughput (30s)</span>
+            <span className={styles.summaryValue}>{formatRate(summary.bytesPerSecond)}</span>
+            <span className={styles.summaryMeta}>Rolling average</span>
+          </article>
+          <article className={styles.summaryCard}>
+            <span className={styles.summaryLabel}>Data observed</span>
+            <span className={styles.summaryValue}>{formatBytes(summary.totalBytes)}</span>
+            <span className={styles.summaryMeta}>Across selected interfaces</span>
+          </article>
         </section>
-      </main>
 
-      <footer className={styles.footer}>
-        <Versions />
-      </footer>
+        <div className={styles.contentGrid}>
+          <section className={styles.panel}>
+            <header className={styles.panelHeader}>
+              <div>
+                <h2 className={styles.panelTitle}>Live traffic</h2>
+                <p className={styles.panelSubtitle}>Newest activity appears at the bottom</p>
+              </div>
+              <span className={styles.panelBadge}>{packets.length.toLocaleString()} packets</span>
+            </header>
+            {packets.length === 0 ? (
+              <div className={styles.panelEmpty}>
+                <span className={styles.emptyGlyph}>📡</span>
+                <span>Listening for network activity...</span>
+              </div>
+            ) : (
+              <div className={styles.packetList} ref={activityListRef}>
+                {[...packets].reverse().map((packet, index) => (
+                  <article
+                    key={`${packet.timestamp}-${index}`}
+                    className={`${styles.packetRow} ${index === packets.length - 1 ? styles.packetRowNew : ''}`}
+                  >
+                    <div className={styles.packetHeader}>
+                      <div className={styles.packetIdentity}>
+                        <span className={styles.packetName}>
+                          {packet.procName || 'Unknown app'}
+                        </span>
+                        <span className={styles.packetMeta}>PID {packet.pid ?? 'N/A'}</span>
+                      </div>
+                      <span className={styles.packetTimestamp}>
+                        {new Date(packet.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <div className={styles.packetRoute}>
+                      <span className={styles.routeEndpoint}>
+                        {getSourceIP(packet)}:{getSourcePort(packet)}
+                      </span>
+                      <span className={styles.routeDivider} aria-hidden>
+                        →
+                      </span>
+                      <span className={styles.routeEndpoint}>
+                        {getDestIP(packet)}:{getDestPort(packet)}
+                      </span>
+                    </div>
+                    <div className={styles.packetChips}>
+                      <span className={`${styles.chip} ${styles.chipProtocol}`}>
+                        {packet.protocol || 'Unknown'}
+                      </span>
+                      <span
+                        className={`${styles.chip} ${styles.chipInterface}`}
+                        title={getPacketInterfaceLabel(packet)}
+                      >
+                        {getPacketInterfaceCategory(packet)}
+                      </span>
+                      <span className={`${styles.chip} ${styles.chipSize}`}>
+                        {formatBytes(packet.size)}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className={`${styles.panel} ${styles.appsPanel}`}>
+            <header className={styles.panelHeader}>
+              <div>
+                <h2 className={styles.panelTitle}>Application insights</h2>
+                <p className={styles.panelSubtitle}>Most active processes</p>
+              </div>
+              <span className={styles.panelBadge}>
+                {summary.uniqueApps.toLocaleString()} active
+              </span>
+            </header>
+            {topApps.length === 0 ? (
+              <div className={styles.panelEmpty}>
+                <span className={styles.emptyGlyph}>💤</span>
+                <span>No application traffic detected yet.</span>
+              </div>
+            ) : (
+              <div className={styles.appsList}>
+                {topApps.map((app, index) => (
+                  <article
+                    key={`${app.name}-${app.pid ?? 'N/A'}-${index}`}
+                    className={styles.appRow}
+                  >
+                    <div className={styles.appHeader}>
+                      <span className={styles.appRank}>{index + 1}</span>
+                      <div className={styles.appIdentityBlock}>
+                        <span className={styles.appName}>{app.name}</span>
+                        <span className={styles.appMeta}>PID {app.pid ?? 'N/A'}</span>
+                      </div>
+                    </div>
+                    <div className={styles.appMetrics}>
+                      <div className={styles.metricItem}>
+                        <span className={styles.metricValue}>
+                          {app.packetCount.toLocaleString()}
+                        </span>
+                        <span className={styles.metricCaption}>packets</span>
+                      </div>
+                      <div className={styles.metricItem}>
+                        <span className={styles.metricValue}>{formatBytes(app.totalBytes)}</span>
+                        <span className={styles.metricCaption}>data</span>
+                      </div>
+                      <div className={styles.metricItem}>
+                        <span className={styles.metricValue}>{formatTimeAgo(app.lastSeen)}</span>
+                        <span className={styles.metricCaption}>last seen</span>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
     </div>
   )
 }

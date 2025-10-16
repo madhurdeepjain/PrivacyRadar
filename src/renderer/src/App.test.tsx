@@ -23,12 +23,16 @@ describe('App dashboard', () => {
     window.api.getNetworkInterfaces = vi.fn().mockResolvedValue({
       interfaces: [],
       bestInterfaceName: undefined,
-      selectedInterfaceName: undefined
+      isCapturing: false,
+      selectedInterfaceNames: [],
+      activeInterfaceNames: []
     })
     window.api.selectNetworkInterface = vi.fn().mockResolvedValue({
       interfaces: [],
       bestInterfaceName: undefined,
-      selectedInterfaceName: undefined
+      isCapturing: false,
+      selectedInterfaceNames: [],
+      activeInterfaceNames: []
     })
   })
 
@@ -42,9 +46,11 @@ describe('App dashboard', () => {
       await Promise.resolve()
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: /privacyradar/i })).toBeInTheDocument()
-    expect(screen.getByText(/waiting for packets/i)).toBeInTheDocument()
-    expect(screen.getByText('Total packets captured')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 1, name: /network operations/i })
+    ).toBeInTheDocument()
+    expect(screen.getByText(/listening for network activity/i)).toBeInTheDocument()
+    expect(screen.getByText('Packets captured')).toBeInTheDocument()
   })
 
   it('updates metrics when new packet data streams in', async () => {
@@ -87,7 +93,6 @@ describe('App dashboard', () => {
     processIds.forEach((element) => {
       expect(element).toBeVisible()
     })
-
     expect(screen.getAllByText('TCP')[0]).toBeInTheDocument()
   })
 })

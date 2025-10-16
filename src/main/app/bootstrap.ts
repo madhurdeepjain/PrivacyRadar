@@ -9,7 +9,7 @@ import {
   stopAnalyzer,
   setMainWindow,
   getInterfaceSelection,
-  switchAnalyzerInterface
+  updateAnalyzerInterfaces
 } from './analyzer-runner'
 import { registerAppLifecycleHandlers, registerProcessSignalHandlers } from './lifecycle'
 
@@ -43,8 +43,8 @@ export async function startApp(): Promise<void> {
 
   if (!ipcHandlersRegistered) {
     ipcMain.handle('network:getInterfaces', async () => getInterfaceSelection())
-    ipcMain.handle('network:selectInterface', async (_event, interfaceName: string) => {
-      await switchAnalyzerInterface(interfaceName)
+    ipcMain.handle('network:selectInterface', async (_event, interfaceNames: string[]) => {
+      await updateAnalyzerInterfaces(interfaceNames)
       return getInterfaceSelection()
     })
     ipcMain.handle('network:startCapture', async () => {

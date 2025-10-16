@@ -6,16 +6,17 @@ import { PacketDecoder } from './packet-decoder'
 type CapInstance = InstanceType<typeof cap.Cap>
 
 export class TrafficCapture {
-  private readonly capture: CapInstance
-  private readonly buffer: Buffer
+  private readonly deviceNames: string[]
+  private readonly captures: CapInstance[]
+  private readonly buffers: Buffer[]
   private running = false
   private packetQueue: PacketMetadata[] = []
-  private linkType: string = ''
   private readonly decoder: PacketDecoder
 
-  constructor(private readonly deviceName: string) {
-    this.capture = new cap.Cap()
-    this.buffer = Buffer.alloc(65535)
+  constructor(deviceNames: string | string[]) {
+    this.deviceNames = Array.isArray(deviceNames) ? deviceNames : [deviceNames]
+    this.captures = this.deviceNames.map(() => new cap.Cap())
+    this.buffers = this.deviceNames.map(() => Buffer.alloc(65535))
     this.decoder = new PacketDecoder()
   }
 
@@ -26,27 +27,44 @@ export class TrafficCapture {
     const filter = ''
     const buffSize = 0xa00000
 
-    const linkTypeResult = this.capture.open(this.deviceName, filter, buffSize, this.buffer)
-    this.linkType = String(linkTypeResult)
+    this.captures.forEach((capture, index) => {
+      const deviceName = this.deviceNames[index]
+      const buffer = this.buffers[index]
 
-    this.capture.on('packet', (nbytes: number) => {
-      const packetCopy = Buffer.allocUnsafe(nbytes)
-      this.buffer.copy(packetCopy, 0, 0, nbytes)
+      const linkTypeResult = capture.open(deviceName, filter, buffSize, buffer)
 
-      const metadata = this.decoder.decode(packetCopy, nbytes)
-      if (metadata) {
-        this.packetQueue.push(metadata)
-      }
+      capture.on('packet', (nbytes: number) => {
+        const packetCopy = Buffer.allocUnsafe(nbytes)
+        buffer.copy(packetCopy, 0, 0, nbytes)
+
+        const metadata = this.decoder.decode(packetCopy, nbytes)
+        if (metadata) {
+          metadata.interfaceName = deviceName
+          this.packetQueue.push(metadata)
+        }
+      })
+
+      logger.info('Traffic capture started', {
+        device: deviceName,
+        linkType: String(linkTypeResult)
+      })
     })
-
-    logger.info('Traffic capture started', { device: this.deviceName, linkType: this.linkType })
   }
 
   stop(): void {
     if (!this.running) return
-    this.capture.close()
+    this.captures.forEach((capture, index) => {
+      try {
+        capture.close()
+      } catch (error) {
+        logger.warn('Failed to close traffic capture', {
+          device: this.deviceNames[index],
+          error
+        })
+      }
+    })
     this.running = false
-    logger.info('Traffic capture stopped')
+    logger.info('Traffic capture stopped', { devices: this.deviceNames })
   }
 
   flushQueue(): PacketMetadata[] {

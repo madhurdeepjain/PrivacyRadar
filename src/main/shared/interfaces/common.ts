@@ -33,6 +33,7 @@ export interface PacketMetadata {
   timestamp: number
   srcPortService?: string
   dstPortService?: string
+  interfaceName?: string
   ethernet: EthernetFrame
   ipv4?: IPv4Header
   ipv6?: IPv6Header

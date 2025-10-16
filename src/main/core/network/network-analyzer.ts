@@ -23,11 +23,15 @@ export class NetworkAnalyzer {
   private connectionSyncTimer: NodeJS.Timeout | null = null
   private readonly onPacketMatched: (pkt: PacketMetadata) => void
 
-  constructor(deviceName: string, localIPs: string[], onPacket: (pkt: PacketMetadata) => void) {
+  constructor(
+    deviceNames: string | string[],
+    localIPs: string[],
+    onPacket: (pkt: PacketMetadata) => void
+  ) {
     this.processTracker = new ProcessTracker()
     this.connectionTracker = new ConnectionTracker()
     this.procConManager = new ProcConManager(this.processTracker, this.connectionTracker, localIPs)
-    this.trafficCapture = new TrafficCapture(deviceName)
+    this.trafficCapture = new TrafficCapture(deviceNames)
     this.onPacketMatched = onPacket
   }
 
