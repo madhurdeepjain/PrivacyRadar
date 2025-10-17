@@ -7,11 +7,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@renderer': resolve(__dirname, 'src/renderer/src'),
-      '@shared': resolve(__dirname, 'src/main/shared')
+      '@shared': resolve(__dirname, 'src/main/shared'),
+      '@infra': resolve(__dirname, 'src/main/infrastructure')
     }
   },
   test: {
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'tests/**/*.spec.{ts,tsx}'],
     exclude: ['tests/e2e/**', 'node_modules/**', 'dist/**', 'out/**'],
     environment: 'jsdom',
     globals: true,

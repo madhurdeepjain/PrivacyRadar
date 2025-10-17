@@ -78,91 +78,105 @@ export async function collectNetstatRows(options?: NetstatOptions): Promise<Nets
 function parseNetstatOutput(output: string): NetstatRow[] {
   const rows: NetstatRow[] = []
 
-  let headerLayout: HeaderLayout | null = null
+  let inActiveConnections = false
+  let header: HeaderLayout | null = null
 
-  output.split(/\r?\n/).forEach((rawLine) => {
-    if (!rawLine.trim()) return
+  output.split(/\r?\n/).forEach((line) => {
+    const trimmedLine = line.trim()
+    if (!trimmedLine) return
 
-    const layout = tryParseHeaderLayout(rawLine)
-    if (layout) {
-      headerLayout = layout
+    const normalizedLine = trimmedLine.toLowerCase()
+
+    if (normalizedLine.includes('active') && normalizedLine.includes('connections')) {
+      inActiveConnections = true
       return
     }
 
-    const parsed = parseDataLine(rawLine, headerLayout)
-    if (parsed) rows.push(parsed)
+    if (inActiveConnections && normalizedLine.startsWith('proto')) {
+      header = extractHeader(trimmedLine)
+      return
+    }
+
+    if (
+      inActiveConnections &&
+      header &&
+      (normalizedLine.startsWith('tcp') || normalizedLine.startsWith('udp'))
+    ) {
+      const parsed = parseDataLine(trimmedLine, header)
+      if (parsed) rows.push(parsed)
+      return
+    }
+
+    inActiveConnections = false
+    header = null
   })
 
   return rows
 }
 
-type HeaderColumnKey = 'protocol' | 'local' | 'remote' | 'state' | 'pid'
+type HeaderLayout = string[]
 
-type HeaderLayout = {
-  columns: Array<{ key: HeaderColumnKey; start: number }>
-}
+function extractHeader(line: string): HeaderLayout | null {
+  const normalizedLine = line
+    .toLowerCase()
+    .replace(/\(state\)/g, 'state')
+    .replace(/local address/g, 'local_address')
+    .replace(/foreign address/g, 'foreign_address')
+    .replace(/pid\/program name/g, 'pid/program_name')
+    .replace(/process name/g, 'process_name')
+    .replace(/\s+/g, ' ')
+    .trim()
 
-function tryParseHeaderLayout(line: string): HeaderLayout | null {
-  const trimmed = line.trim()
-  if (!trimmed) return null
-
-  if (!trimmed.includes('Proto') || !trimmed.includes('Local')) return null
-
-  const protoPos = findColumnPosition(line, ['Proto'])
-  const localPos = findColumnPosition(line, ['Local Address'])
-  const remotePos = findColumnPosition(line, ['Foreign Address', 'Remote Address'])
-  const statePos = findColumnPosition(line, ['(state)', 'State'])
-  const pidPos = findColumnPosition(line, ['PID'])
-
-  if (protoPos === undefined || localPos === undefined || remotePos === undefined) {
+  if (
+    !normalizedLine.includes('proto') ||
+    !normalizedLine.includes('local_address') ||
+    !normalizedLine.includes('foreign_address')
+  ) {
     return null
   }
 
-  const columns: HeaderLayout['columns'] = [
-    { key: 'protocol', start: protoPos },
-    { key: 'local', start: localPos },
-    { key: 'remote', start: remotePos }
-  ]
-
-  if (statePos !== undefined) columns.push({ key: 'state', start: statePos })
-  if (pidPos !== undefined) columns.push({ key: 'pid', start: pidPos })
-
-  columns.sort((a, b) => a.start - b.start)
-
-  return { columns }
+  return normalizedLine.split(' ')
 }
 
-function findColumnPosition(line: string, labels: string[]): number | undefined {
-  const lower = line.toLowerCase()
-  for (const label of labels) {
-    const idx = lower.indexOf(label.toLowerCase())
-    if (idx !== -1) return idx
+function parseDataLine(line: string, header: HeaderLayout | null): NetstatRow | null {
+  if (!header) return null
+
+  const protoIndex = header.indexOf('proto')
+  const localIndex = header.indexOf('local_address')
+  const foreignIndex = header.indexOf('foreign_address')
+
+  if (protoIndex === -1 || localIndex === -1 || foreignIndex === -1) return null
+
+  const dataColumns = line.trim().split(/\s+/)
+
+  const protocolToken = dataColumns[protoIndex]?.toUpperCase()
+  if (!protocolToken || (!protocolToken.startsWith('TCP') && !protocolToken.startsWith('UDP')))
+    return null
+
+  const stateIndex = header.indexOf('state')
+  const pidIndex = header.findIndex((headerColumn) => headerColumn.includes('pid'))
+
+  if (
+    protocolToken.startsWith('UDP') &&
+    stateIndex !== -1 &&
+    dataColumns.length === header.length - 1
+  ) {
+    dataColumns.splice(stateIndex, 0, '')
   }
-  return undefined
-}
 
-function parseDataLine(line: string, headerLayout: HeaderLayout | null): NetstatRow | null {
-  if (!headerLayout) return null
+  const localRaw = dataColumns[localIndex]
+  const remoteRaw = dataColumns[foreignIndex]
 
-  const columns = extractColumns(line, headerLayout)
-
-  const protocolToken = columns.protocol?.trim().split(/\s+/)[0]
-  const protocol = protocolToken?.toUpperCase()
-  if (!protocol || !/^(TCP|UDP)/.test(protocol)) return null
-
-  const localRaw = columns.local
-  const remoteRaw = columns.remote
   if (!localRaw || !remoteRaw) return null
 
-  const stateRaw = columns.state
-  const pidRaw = columns.pid
-
+  const stateRaw = stateIndex !== -1 ? dataColumns[stateIndex] : undefined
   const state = stateRaw?.replace(/[()]/g, '').trim() || undefined
-  const pidColumn = pidRaw?.split(/ {2,}/)[0]
-  const pid = parsePid(pidColumn)
+
+  const pidColumnLabel = pidIndex !== -1 ? header[pidIndex] : undefined
+  const pid = extractPid(dataColumns, pidIndex, pidColumnLabel)
 
   return {
-    protocol,
+    protocol: protocolToken,
     local: parseEndpoint(localRaw.trim()),
     remote: parseEndpoint(remoteRaw.trim()),
     state,
@@ -170,19 +184,39 @@ function parseDataLine(line: string, headerLayout: HeaderLayout | null): Netstat
   }
 }
 
-function extractColumns(
-  line: string,
-  headerLayout: HeaderLayout
-): Record<HeaderColumnKey, string | undefined> {
-  const result: Partial<Record<HeaderColumnKey, string>> = {}
-  const sorted = headerLayout.columns
+function extractPid(
+  dataColumns: string[],
+  pidIndex: number,
+  pidColumnLabel?: string
+): number | undefined {
+  if (pidIndex === -1 || !pidColumnLabel) return undefined
 
-  for (let i = 0; i < sorted.length; i += 1) {
-    const { key, start } = sorted[i]
-    result[key] = line.slice(start).split(' ')[0].split('/')[0]
+  const rawValue = dataColumns[pidIndex]
+  if (!rawValue) return undefined
+
+  if (pidColumnLabel === 'pid/program_name') {
+    const [pidPart] = rawValue.split('/')
+    return parsePid(pidPart)
   }
 
-  return result as Record<HeaderColumnKey, string | undefined>
+  if (pidColumnLabel === 'process:pid') {
+    const pattern = /:(\d+)$/
+    for (let idx = pidIndex; idx < dataColumns.length; idx += 1) {
+      const match = dataColumns[idx].match(pattern)
+      if (match) {
+        return parsePid(match[1])
+      }
+    }
+    return undefined
+  }
+
+  return parsePid(rawValue)
+}
+
+function parsePid(value: string | undefined): number | undefined {
+  if (!value) return undefined
+  const parsed = Number.parseInt(value, 10)
+  return Number.isNaN(parsed) ? undefined : parsed
 }
 
 function parseEndpoint(raw: string | undefined): NetstatEndpoint | undefined {
@@ -213,25 +247,4 @@ function parseEndpoint(raw: string | undefined): NetstatEndpoint | undefined {
   }
 
   return { address: raw }
-}
-
-function parsePid(token: string | undefined): number | undefined {
-  if (!token) return undefined
-
-  const colonMatch = token.match(/:(\d+)/)
-  if (colonMatch) {
-    const pid = Number.parseInt(colonMatch[1], 10)
-    return Number.isNaN(pid) ? undefined : pid
-  }
-
-  const leadingMatch = token.match(/^(\d+)/)
-  if (leadingMatch) {
-    const pid = Number.parseInt(leadingMatch[1], 10)
-    if (!Number.isNaN(pid)) return pid
-  }
-
-  const trailingMatch = token.match(/(\d+)(?!.*\d)/)
-  if (!trailingMatch) return undefined
-  const pid = Number.parseInt(trailingMatch[1], 10)
-  return Number.isNaN(pid) ? undefined : pid
 }
