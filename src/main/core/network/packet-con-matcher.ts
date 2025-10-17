@@ -11,7 +11,7 @@ export class PacketConMatcher {
     protocol: string
   ): string | null {
     if (!addr1 || !port1 || !protocol) return null
-    const proto = protocol.toUpperCase()
+    const proto = protocol.toLowerCase().replace(/6$/, '')
 
     if (!addr2 || !port2) {
       return `${addr1}:${port1}|${proto}`
