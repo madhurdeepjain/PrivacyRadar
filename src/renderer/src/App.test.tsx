@@ -23,14 +23,14 @@ describe('App dashboard', () => {
     window.api.getNetworkInterfaces = vi.fn().mockResolvedValue({
       interfaces: [],
       bestInterfaceName: undefined,
-      isCapturing: false,
+      isCapturing: true,
       selectedInterfaceNames: [],
       activeInterfaceNames: []
     })
     window.api.selectNetworkInterface = vi.fn().mockResolvedValue({
       interfaces: [],
       bestInterfaceName: undefined,
-      isCapturing: false,
+      isCapturing: true,
       selectedInterfaceNames: [],
       activeInterfaceNames: []
     })
