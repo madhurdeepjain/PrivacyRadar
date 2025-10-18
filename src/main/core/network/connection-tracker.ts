@@ -60,7 +60,10 @@ export class ConnectionTracker {
             }
           } else if (proto.startsWith('udp')) {
             const isListener =
-              !remoteAddr || remoteAddr === '*' || remoteAddr === '0.0.0.0' || remoteAddr === normalizeIPv6('::')
+              !remoteAddr ||
+              remoteAddr === '*' ||
+              remoteAddr === '0.0.0.0' ||
+              remoteAddr === normalizeIPv6('::')
 
             const mapping: UDPPortMapping = {
               port: localPort,
