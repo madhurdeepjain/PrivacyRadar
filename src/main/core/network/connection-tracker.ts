@@ -28,37 +28,42 @@ export class ConnectionTracker {
 
       rows.forEach((row) => {
         try {
-          const proto = (row.protocol ?? '').toUpperCase()
+          const proto = (row.protocol ?? '').toLowerCase()
           const localAddr = normalizeIPv6(row.local?.address ?? '')
           const localPort = row.local?.port
           const remoteAddr = row.remote?.address ? normalizeIPv6(row.remote.address) : undefined
           const state = row.state ?? ''
 
-          if (!localPort) return
+          if (!localPort || !row.pid) return
           if (this.isLoopback(localAddr) || (remoteAddr && this.isLoopback(remoteAddr))) return
 
-          if (proto.startsWith('TCP')) {
-            connectionsList.push({
-              pid: row.pid,
-              procName: '',
-              srcaddr: localAddr,
-              srcport: localPort,
-              dstaddr: remoteAddr,
-              dstport: row.remote?.port ?? undefined,
-              protocol: proto,
-              state
-            })
-
-            if ((state === 'ESTABLISHED' || state === 'LISTENING') && row.pid) {
-              tcpMap.set(`${localAddr}:${localPort}`, {
+          if (proto.startsWith('tcp')) {
+            if (state === 'ESTABLISHED' && remoteAddr && row.remote?.port) {
+              connectionsList.push({
                 pid: row.pid,
                 procName: '',
-                lastSeen: Date.now()
+                srcaddr: localAddr,
+                srcport: localPort,
+                dstaddr: remoteAddr,
+                dstport: row.remote?.port ?? undefined,
+                protocol: proto,
+                state
               })
+
+              if (state === 'ESTABLISHED' || state === 'LISTENING') {
+                tcpMap.set(`${localAddr}:${localPort}`, {
+                  pid: row.pid,
+                  procName: '',
+                  lastSeen: Date.now()
+                })
+              }
             }
-          } else if (proto.startsWith('UDP')) {
+          } else if (proto.startsWith('udp')) {
             const isListener =
-              !remoteAddr || remoteAddr === '*' || remoteAddr === '0.0.0.0' || remoteAddr === '::'
+              !remoteAddr ||
+              remoteAddr === '*' ||
+              remoteAddr === '0.0.0.0' ||
+              remoteAddr === normalizeIPv6('::')
 
             const mapping: UDPPortMapping = {
               port: localPort,
@@ -71,7 +76,7 @@ export class ConnectionTracker {
 
             if (isListener) {
               udpMap.set(`${localAddr}:${localPort}`, { ...mapping })
-              udpMap.set(`:${localPort}`, { ...mapping, address: '' })
+              udpMap.set(`:${localPort}`, { ...mapping, address: '*' })
             } else {
               udpMap.set(`${localAddr}:${localPort}`, mapping)
             }

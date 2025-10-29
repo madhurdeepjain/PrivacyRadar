@@ -45,7 +45,7 @@ export class ProcConManager {
   }
 
   enqueuePacket(pkt: PacketMetadata): void {
-    if (!pkt.protocol?.startsWith('UDP')) {
+    if (!pkt.protocol?.startsWith('udp')) {
       const conn = this.matcher.matchPacketToCon(pkt)
       pkt.pid = conn?.pid
       pkt.procName = conn?.procName ?? 'UNKNOWN'
