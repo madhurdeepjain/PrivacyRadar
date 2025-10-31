@@ -1,7 +1,8 @@
 import {
   CONNECTION_POLL_INTERVAL_MS,
   NETSTAT_TIMEOUT_MS,
-  UDP_STALE_THRESHOLD_MS
+  UDP_STALE_THRESHOLD_MS,
+  TCP_STATES
 } from '@config/constants'
 import { logger } from '@infra/logging'
 import { NetworkConnection, UDPPortMapping } from '@shared/interfaces/common'
@@ -38,7 +39,7 @@ export class ConnectionTracker {
           if (this.isLoopback(localAddr) || (remoteAddr && this.isLoopback(remoteAddr))) return
 
           if (proto.startsWith('tcp')) {
-            if (state === 'ESTABLISHED' && remoteAddr && row.remote?.port) {
+            if (TCP_STATES.has(state) && remoteAddr && row.remote?.port) {
               connectionsList.push({
                 pid: row.pid,
                 procName: '',
@@ -50,7 +51,7 @@ export class ConnectionTracker {
                 state
               })
 
-              if (state === 'ESTABLISHED' || state === 'LISTENING') {
+              if (state === 'ESTABLISHED' || state === 'LISTENING' || state === 'LISTEN') {
                 tcpMap.set(`${localAddr}:${localPort}`, {
                   pid: row.pid,
                   procName: '',
@@ -87,9 +88,9 @@ export class ConnectionTracker {
               srcaddr: localAddr,
               srcport: localPort,
               dstaddr: remoteAddr,
-              dstport: row.remote?.port ?? undefined,
-              protocol: proto,
-              state: isListener ? 'LISTENING' : 'ESTABLISHED'
+              dstport: row.remote?.port,
+              protocol: 'udp',
+              state: 'ESTABLISHED'
             })
           }
         } catch (error) {
