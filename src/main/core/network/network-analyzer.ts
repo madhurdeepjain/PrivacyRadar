@@ -23,7 +23,7 @@ export class NetworkAnalyzer {
   private connectionSyncTimer: NodeJS.Timeout | null = null
   private readonly onPacketMatched: (pkt: PacketMetadata) => void
   private unmatchedQueue: Array<{ pkt: PacketMetadata; count: number}> = []
-  private readonly MAX_RETRIES = 9
+  private readonly MAX_RETRIES = 3
 
   constructor(
     deviceNames: string | string[],

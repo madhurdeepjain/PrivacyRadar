@@ -65,7 +65,7 @@ export class ProcConManager {
 
     if (conn) {
       pkt.pid = conn.pid
-      pkt.procName = conn.procName ?? 'UNKNOWN_CONN'
+      pkt.procName = conn.procName ?? 'UNKNOWN'
       this.packetQueue.push(pkt)
       return
     }
@@ -75,7 +75,7 @@ export class ProcConManager {
     const localPort = srcIsLocal ? pkt.srcport : pkt.dstport
 
     if (!localIP || !localPort) {
-      pkt.procName = 'UNKNOWN_MATCHTCP_PKT'
+      pkt.procName = 'UNKNOWN'
       this.packetQueue.push(pkt)
       return
     }
@@ -86,7 +86,7 @@ export class ProcConManager {
       pkt.pid = mapping.pid
 
       if (mapping.pid && !mapping.procName) {
-        mapping.procName = this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN_PROCTRACK_MATCH_FAIL'
+        mapping.procName = this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN'
       }
 
       pkt.procName = mapping.procName ?? 'UNKNOWN'
@@ -105,7 +105,7 @@ export class ProcConManager {
 
       this.promoteToFullCon(pkt, tcpConn)
     } else {
-      pkt.procName = 'UNKNOWN_MATCHTCP_PKT'
+      pkt.procName = 'UNKNOWN'
     }
 
     this.packetQueue.push(pkt)
@@ -116,7 +116,7 @@ export class ProcConManager {
 
     if (conn) {
       pkt.pid = conn.pid
-      pkt.procName = conn.procName ?? 'UNKNOWN_CONN'
+      pkt.procName = conn.procName ?? 'UNKNOWN'
       this.packetQueue.push(pkt)
       return
     }
@@ -134,7 +134,7 @@ export class ProcConManager {
     if (mapping) {
       pkt.pid = mapping.pid
       if (mapping.pid && !mapping.procName) {
-        mapping.procName = this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN_PROCTRACK_MATCH_FAIL'
+        mapping.procName = this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN'
       }
       pkt.procName = mapping.procName ?? 'UNKNOWN'
       mapping.lastSeen = Date.now()
@@ -151,7 +151,7 @@ export class ProcConManager {
       }
       this.promoteToFullCon(pkt, udpConn)
     } else {
-      pkt.procName = 'UNKNOWN_MATCHUDP_PKT'
+      pkt.procName = 'UNKNOWN'
     }
     this.packetQueue.push(pkt)
   }
