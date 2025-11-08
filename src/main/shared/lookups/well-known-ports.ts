@@ -1,5 +1,4 @@
 export const WK_PORTS: Record<number, string> = {
-
   // Discovery & Local Network
   137: 'NetBIOS-NS',
   138: 'NetBIOS-DGM',

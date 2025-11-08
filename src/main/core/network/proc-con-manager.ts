@@ -45,7 +45,6 @@ export class ProcConManager {
   }
 
   enqueuePacket(pkt: PacketMetadata): void {
-
     if (this.isSystemPacket(pkt)) {
       pkt.pid = -1
       pkt.procName = 'SYSTEM'
@@ -159,7 +158,7 @@ export class ProcConManager {
   private promoteToFullCon(pkt: PacketMetadata, conn: NetworkConnection): void {
     if (!pkt.srcIP || !pkt.dstIP || !pkt.srcport || !pkt.dstport || !conn.pid) return
     this.connectionTracker.getConnections().push(conn)
-}
+  }
 
   private isSystemPacket(pkt: PacketMetadata): boolean {
     const protocol = pkt.protocol?.toLowerCase() ?? ''

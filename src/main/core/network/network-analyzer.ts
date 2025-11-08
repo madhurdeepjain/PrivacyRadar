@@ -22,7 +22,7 @@ export class NetworkAnalyzer {
   private packetProcessingTimer: NodeJS.Timeout | null = null
   private connectionSyncTimer: NodeJS.Timeout | null = null
   private readonly onPacketMatched: (pkt: PacketMetadata) => void
-  private unmatchedQueue: Array<{ pkt: PacketMetadata; count: number}> = []
+  private unmatchedQueue: Array<{ pkt: PacketMetadata; count: number }> = []
   private readonly MAX_RETRIES = 3
 
   constructor(
@@ -49,10 +49,7 @@ export class NetworkAnalyzer {
 
     this.packetProcessingTimer = setInterval(() => {
       const newPackets = this.trafficCapture.flushQueue()
-      const allPackets = [
-        ...newPackets.map(pkt => ({ pkt, count: 0})),
-        ...this.unmatchedQueue
-    ]
+      const allPackets = [...newPackets.map((pkt) => ({ pkt, count: 0 })), ...this.unmatchedQueue]
       this.unmatchedQueue = []
       if (allPackets.length === 0) return
 
@@ -62,7 +59,7 @@ export class NetworkAnalyzer {
       const stillUnmatched: Array<{ pkt: PacketMetadata; count: number }> = []
 
       processedPackets.forEach((pkt) => {
-        const originalEntry = allPackets.find(entry => entry.pkt.timestamp === pkt.timestamp)
+        const originalEntry = allPackets.find((entry) => entry.pkt.timestamp === pkt.timestamp)
         const retryCount = originalEntry?.count ?? 0
         const isMatched = pkt.procName && !pkt.procName?.startsWith('UNKNOWN') && pkt.pid
 
@@ -76,7 +73,7 @@ export class NetworkAnalyzer {
       })
 
       if (matched.length > 0) {
-        matched.forEach(pkt => this.onPacketMatched(pkt))
+        matched.forEach((pkt) => this.onPacketMatched(pkt))
       }
 
       this.unmatchedQueue = stillUnmatched
