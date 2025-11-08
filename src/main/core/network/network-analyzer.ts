@@ -22,6 +22,8 @@ export class NetworkAnalyzer {
   private packetProcessingTimer: NodeJS.Timeout | null = null
   private connectionSyncTimer: NodeJS.Timeout | null = null
   private readonly onPacketMatched: (pkt: PacketMetadata) => void
+  private unmatchedQueue: Array<{ pkt: PacketMetadata; count: number }> = []
+  private readonly MAX_RETRIES = 3
 
   constructor(
     deviceNames: string | string[],
@@ -46,13 +48,35 @@ export class NetworkAnalyzer {
     this.trafficCapture.start()
 
     this.packetProcessingTimer = setInterval(() => {
-      const packets = this.trafficCapture.flushQueue()
-      if (packets.length === 0) return
+      const newPackets = this.trafficCapture.flushQueue()
+      const allPackets = [...newPackets.map((pkt) => ({ pkt, count: 0 })), ...this.unmatchedQueue]
+      this.unmatchedQueue = []
+      if (allPackets.length === 0) return
 
-      packets.forEach((pkt) => this.procConManager.enqueuePacket(pkt))
-      const matchedPackets = this.procConManager.flushQueue()
+      allPackets.forEach(({ pkt }) => this.procConManager.enqueuePacket(pkt))
+      const processedPackets = this.procConManager.flushQueue()
+      const matched: PacketMetadata[] = []
+      const stillUnmatched: Array<{ pkt: PacketMetadata; count: number }> = []
 
-      matchedPackets.forEach((pkt) => this.onPacketMatched(pkt))
+      processedPackets.forEach((pkt) => {
+        const originalEntry = allPackets.find((entry) => entry.pkt.timestamp === pkt.timestamp)
+        const retryCount = originalEntry?.count ?? 0
+        const isMatched = pkt.procName && !pkt.procName?.startsWith('UNKNOWN') && pkt.pid
+
+        if (isMatched) {
+          matched.push(pkt)
+        } else if (retryCount < this.MAX_RETRIES) {
+          stillUnmatched.push({ pkt, count: retryCount + 1 })
+        } else {
+          matched.push(pkt)
+        }
+      })
+
+      if (matched.length > 0) {
+        matched.forEach((pkt) => this.onPacketMatched(pkt))
+      }
+
+      this.unmatchedQueue = stillUnmatched
     }, PACKET_PROCESS_INTERVAL_MS)
   }
 
