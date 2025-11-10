@@ -4,6 +4,7 @@ import { ProcessTracker } from './process-tracker'
 import { ConnectionTracker } from './connection-tracker'
 import { PacketConMatcher } from './packet-con-matcher'
 import { SYSTEM_PROTOCOLS, SYSTEM_PORTS } from '@main/config/constants'
+import { SYSTEM_PROTOCOLS, SYSTEM_PORTS } from '@main/config/constants'
 
 export class ProcConManager {
   private readonly matcher: PacketConMatcher = new PacketConMatcher()
@@ -32,6 +33,9 @@ export class ProcConManager {
     this.connectionTracker.getTCPConMap().forEach((mapping) => {
       if (mapping.pid && !mapping.procName) {
         mapping.procName = this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN'
+    this.connectionTracker.getTCPConMap().forEach((mapping) => {
+      if (mapping.pid && !mapping.procName) {
+        mapping.procName = this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN'
       }
     })
 
@@ -52,7 +56,15 @@ export class ProcConManager {
       return
     }
 
+    if (this.isSystemPacket(pkt)) {
+      pkt.pid = -1
+      pkt.procName = 'SYSTEM'
+      this.packetQueue.push(pkt)
+      return
+    }
+
     if (!pkt.protocol?.startsWith('udp')) {
+      void this.matchTCPPacket(pkt)
       void this.matchTCPPacket(pkt)
     } else {
       void this.matchUDPPacket(pkt)
@@ -64,7 +76,7 @@ export class ProcConManager {
 
     if (conn) {
       pkt.pid = conn.pid
-      pkt.procName = conn.procName ?? 'UNKNOWN'
+      pkt.procName = conn.procName ?? 'UNKNOWN_CONN'
       this.packetQueue.push(pkt)
       return
     }
@@ -74,7 +86,7 @@ export class ProcConManager {
     const localPort = srcIsLocal ? pkt.srcport : pkt.dstport
 
     if (!localIP || !localPort) {
-      pkt.procName = 'UNKNOWN'
+      pkt.procName = 'UNKNOWN_MATCHTCP_PKT'
       this.packetQueue.push(pkt)
       return
     }
@@ -85,7 +97,8 @@ export class ProcConManager {
       pkt.pid = mapping.pid
 
       if (mapping.pid && !mapping.procName) {
-        mapping.procName = this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN'
+        mapping.procName =
+          this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN_PROCTRACK_MATCH_FAIL'
       }
 
       pkt.procName = mapping.procName ?? 'UNKNOWN'
@@ -104,7 +117,7 @@ export class ProcConManager {
 
       this.promoteToFullCon(pkt, tcpConn)
     } else {
-      pkt.procName = 'UNKNOWN'
+      pkt.procName = 'UNKNOWN_MATCHTCP_PKT'
     }
 
     this.packetQueue.push(pkt)
@@ -115,7 +128,7 @@ export class ProcConManager {
 
     if (conn) {
       pkt.pid = conn.pid
-      pkt.procName = conn.procName ?? 'UNKNOWN'
+      pkt.procName = conn.procName ?? 'UNKNOWN_CONN'
       this.packetQueue.push(pkt)
       return
     }
@@ -133,7 +146,8 @@ export class ProcConManager {
     if (mapping) {
       pkt.pid = mapping.pid
       if (mapping.pid && !mapping.procName) {
-        mapping.procName = this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN'
+        mapping.procName =
+          this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN_PROCTRACK_MATCH_FAIL'
       }
       pkt.procName = mapping.procName ?? 'UNKNOWN'
       mapping.lastSeen = Date.now()
@@ -150,9 +164,31 @@ export class ProcConManager {
       }
       this.promoteToFullCon(pkt, udpConn)
     } else {
-      pkt.procName = 'UNKNOWN'
+      pkt.procName = 'UNKNOWN_MATCHUDP_PKT'
     }
     this.packetQueue.push(pkt)
+  }
+
+  private promoteToFullCon(pkt: PacketMetadata, conn: NetworkConnection): void {
+    if (!pkt.srcIP || !pkt.dstIP || !pkt.srcport || !pkt.dstport || !conn.pid) return
+    this.connectionTracker.getConnections().push(conn)
+  }
+
+  private isSystemPacket(pkt: PacketMetadata): boolean {
+    const protocol = pkt.protocol?.toLowerCase() ?? ''
+    if (SYSTEM_PROTOCOLS.has(protocol)) {
+      return true
+    }
+    const srcPort = pkt.srcport ?? 0
+    const dstPort = pkt.dstport ?? 0
+
+    if (SYSTEM_PORTS.has(srcPort) || SYSTEM_PORTS.has(dstPort)) {
+      if (!pkt.pid || pkt.pid === 0 || pkt.pid === 4) {
+        return true
+      }
+    }
+
+    return false
   }
 
   private promoteToFullCon(pkt: PacketMetadata, conn: NetworkConnection): void {
