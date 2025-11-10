@@ -4,7 +4,6 @@ import { ProcessTracker } from './process-tracker'
 import { ConnectionTracker } from './connection-tracker'
 import { PacketConMatcher } from './packet-con-matcher'
 import { SYSTEM_PROTOCOLS, SYSTEM_PORTS } from '@main/config/constants'
-import { SYSTEM_PROTOCOLS, SYSTEM_PORTS } from '@main/config/constants'
 
 export class ProcConManager {
   private readonly matcher: PacketConMatcher = new PacketConMatcher()
@@ -33,9 +32,6 @@ export class ProcConManager {
     this.connectionTracker.getTCPConMap().forEach((mapping) => {
       if (mapping.pid && !mapping.procName) {
         mapping.procName = this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN'
-    this.connectionTracker.getTCPConMap().forEach((mapping) => {
-      if (mapping.pid && !mapping.procName) {
-        mapping.procName = this.processTracker.getProcessName(mapping.pid) ?? 'UNKNOWN'
       }
     })
 
@@ -49,13 +45,6 @@ export class ProcConManager {
   }
 
   enqueuePacket(pkt: PacketMetadata): void {
-    if (this.isSystemPacket(pkt)) {
-      pkt.pid = -1
-      pkt.procName = 'SYSTEM'
-      this.packetQueue.push(pkt)
-      return
-    }
-
     if (this.isSystemPacket(pkt)) {
       pkt.pid = -1
       pkt.procName = 'SYSTEM'
@@ -167,28 +156,6 @@ export class ProcConManager {
       pkt.procName = 'UNKNOWN_MATCHUDP_PKT'
     }
     this.packetQueue.push(pkt)
-  }
-
-  private promoteToFullCon(pkt: PacketMetadata, conn: NetworkConnection): void {
-    if (!pkt.srcIP || !pkt.dstIP || !pkt.srcport || !pkt.dstport || !conn.pid) return
-    this.connectionTracker.getConnections().push(conn)
-  }
-
-  private isSystemPacket(pkt: PacketMetadata): boolean {
-    const protocol = pkt.protocol?.toLowerCase() ?? ''
-    if (SYSTEM_PROTOCOLS.has(protocol)) {
-      return true
-    }
-    const srcPort = pkt.srcport ?? 0
-    const dstPort = pkt.dstport ?? 0
-
-    if (SYSTEM_PORTS.has(srcPort) || SYSTEM_PORTS.has(dstPort)) {
-      if (!pkt.pid || pkt.pid === 0 || pkt.pid === 4) {
-        return true
-      }
-    }
-
-    return false
   }
 
   private promoteToFullCon(pkt: PacketMetadata, conn: NetworkConnection): void {
