@@ -1,17 +1,25 @@
 import { BrowserWindow } from 'electron'
 import { join } from 'path'
-import { DEV_DATA_PATH, PROC_CON_SNAPSHOT_INTERVAL_MS } from '@config/constants'
+import {
+  DEV_DATA_PATH,
+  PROC_CON_SNAPSHOT_INTERVAL_MS,
+  REGISTRY_SNAPSHOT_INTERVAL_MS
+} from '@config/constants'
 import { logger } from '@infra/logging'
 import { NetworkAnalyzer } from '@main/core/network/network-analyzer'
 import { PacketWriter } from '@main/core/network/packet-writer'
+import { RegistryWriter } from '@main/core/network/registry-writer'
 import { getDeviceInfo } from '@shared/utils/device-info'
 import { setBestInterfaceInfo } from '@shared/utils/interface-utils'
 import { isDevelopment } from '@shared/utils/environment'
 import { Device, NetworkInterface, PacketMetadata } from '@shared/interfaces/common'
+import { formatIPv6Address } from '@main/shared/utils/address-normalizer'
 
 let analyzer: NetworkAnalyzer | null = null
 let writer: PacketWriter | null = null
+let registryWriter: RegistryWriter | null = null
 let snapshotInterval: NodeJS.Timeout | null = null
+let registrySnapshotInterval: NodeJS.Timeout | null = null
 let mainWindow: BrowserWindow | null = null
 let deviceInfoCache: Device | null = null
 let selectedInterfaceNames: string[] = []
@@ -20,18 +28,28 @@ let interfaceSwitchLock: Promise<void> = Promise.resolve()
 
 function setupPeriodicTasks(
   networkAnalyzer: NetworkAnalyzer,
-  packetWriter: PacketWriter | null
+  packetWriter: PacketWriter | null,
+  regWriter: RegistryWriter | null
 ): void {
   if (snapshotInterval) clearInterval(snapshotInterval)
   snapshotInterval = null
+  if (registrySnapshotInterval) clearInterval(registrySnapshotInterval)
+  registrySnapshotInterval = null
 
-  if (!packetWriter) {
-    return
+  if (packetWriter) {
+    snapshotInterval = setInterval(() => {
+      packetWriter.writeProcConSnapshot(networkAnalyzer.getConnections())
+    }, PROC_CON_SNAPSHOT_INTERVAL_MS)
   }
 
-  snapshotInterval = setInterval(() => {
-    packetWriter.writeProcConSnapshot(networkAnalyzer.getConnections())
-  }, PROC_CON_SNAPSHOT_INTERVAL_MS)
+  if (regWriter) {
+    registrySnapshotInterval = setInterval(() => {
+      const globalReg = networkAnalyzer.getGlobalRegistry()
+      const appRegs = networkAnalyzer.getApplicationRegistries()
+      const procRegs = networkAnalyzer.getProcessRegistries()
+      regWriter.writeRegistries(globalReg, appRegs, procRegs)
+    }, REGISTRY_SNAPSHOT_INTERVAL_MS)
+  }
 }
 
 function sendDataToFrontend(pkt: PacketMetadata): void {
@@ -124,7 +142,9 @@ export function getInterfaceSelection(): {
 
 export async function startAnalyzer(interfaceNames?: string | string[]): Promise<void> {
   const deviceInfo = refreshDeviceInfo()
-
+  deviceInfo.interfaces.forEach((iface) => {
+    iface.addresses = iface.addresses.map((addr) => formatIPv6Address(addr))
+  })
   if (Array.isArray(interfaceNames)) {
     applySelectedInterfaces(deviceInfo, interfaceNames)
   } else if (interfaceNames) {
@@ -148,6 +168,7 @@ export async function startAnalyzer(interfaceNames?: string | string[]): Promise
   if (isDevelopment()) {
     const basePath = join(DEV_DATA_PATH, 'packets')
     writer = new PacketWriter(basePath)
+    registryWriter = new RegistryWriter(basePath)
   } else {
     writer = null
   }
@@ -165,14 +186,16 @@ export async function startAnalyzer(interfaceNames?: string | string[]): Promise
     await analyzer.start()
   } catch (error) {
     writer?.close()
+    registryWriter?.close()
     writer = null
+    registryWriter = null
     analyzer = null
     activeInterfaceNames = []
     throw error
   }
 
   activeInterfaceNames = interfaceNamesToCapture
-  setupPeriodicTasks(analyzer, writer)
+  setupPeriodicTasks(analyzer, writer, registryWriter)
   if (!writer) {
     logger.info('Packet persistence disabled (production mode)')
   }
@@ -180,15 +203,20 @@ export async function startAnalyzer(interfaceNames?: string | string[]): Promise
 }
 
 export function stopAnalyzer(): void {
-  if (!analyzer && !writer) {
+  if (!analyzer && !writer && !registryWriter) {
     return
   }
 
   if (snapshotInterval) clearInterval(snapshotInterval)
   snapshotInterval = null
+  if (registrySnapshotInterval) clearInterval(registrySnapshotInterval)
+  registrySnapshotInterval = null
+
   writer?.close()
+  registryWriter?.close()
   analyzer?.stop()
   writer = null
+  registryWriter = null
   analyzer = null
   activeInterfaceNames = []
   logger.info('Network analyzer stopped')

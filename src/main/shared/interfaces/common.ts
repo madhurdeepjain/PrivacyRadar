@@ -34,6 +34,10 @@ export interface PacketMetadata {
   srcPortService?: string
   dstPortService?: string
   interfaceName?: string
+  appRegistryID?: string
+  appName?: string
+  appDisplayName?: string
+  appInstance?: string
   ethernet: EthernetFrame
   ipv4?: IPv4Header
   ipv6?: IPv6Header
@@ -117,4 +121,114 @@ export interface ICMPHeader {
   checksum: number
   id?: number
   seq?: number
+}
+
+export interface GlobalRegistry {
+  interfaceName: string
+  totalPackets: number
+  totalBytesSent: number
+  totalBytesReceived: number
+  ipv4Packets: number
+  ipv6Packets: number
+  tcpPackets: number
+  udpPackets: number
+  ipv4Percent: number
+  ipv6Percent: number
+  tcpPercent: number
+  udpPercent: number
+  inboundBytes: number
+  outboundBytes: number
+  firstSeen: number
+  lastSeen: number
+}
+
+export interface ApplicationRegistry {
+  appName: string
+  appDisplayName: string
+  totalPackets: number
+  totalBytesSent: number
+  totalBytesReceived: number
+  inboundBytes: number
+  outboundBytes: number
+  ipv4Packets: number
+  ipv6Packets: number
+  tcpPackets: number
+  udpPackets: number
+  ipv4Percent: number
+  ipv6Percent: number
+  tcpPercent: number
+  udpPercent: number
+  uniqueRemoteIPs: Set<string>
+  uniqueDomains: Set<string>
+  //geoLocations: GeoLocationData[]
+  interfaceStats: Map<
+    string,
+    {
+      packets: number
+      bytesSent: number
+      bytesReceived: number
+    }
+  >
+  firstSeen: number
+  lastSeen: number
+  processRegistryIDs: string[]
+  processCount: number
+}
+
+export interface ProcessRegistry {
+  id: string
+  appName: string
+  pid: number
+  parentPID: number
+  procName: string
+  exePath?: string
+  isRootProcess: boolean
+  totalPackets: number
+  totalBytesSent: number
+  totalBytesReceived: number
+  inboundBytes: number
+  outboundBytes: number
+  ipv4Packets: number
+  ipv6Packets: number
+  tcpPackets: number
+  udpPackets: number
+  ipv4Percent: number
+  ipv6Percent: number
+  tcpPercent: number
+  udpPercent: number
+  uniqueRemoteIPs: Set<string>
+  //geoLocations: GeoLocationData[]
+  interfaceStats: Map<
+    string,
+    {
+      packets: number
+      bytesSent: number
+      bytesReceived: number
+    }
+  >
+
+  firstSeen: number
+  lastSeen: number
+}
+
+export interface EmptyStats {
+  totalPackets: number
+  totalBytesSent: number
+  totalBytesReceived: number
+  inboundBytes: number
+  outboundBytes: number
+  ipv4Packets: number
+  ipv6Packets: number
+  tcpPackets: number
+  udpPackets: number
+  ipv4Percent: number
+  ipv6Percent: number
+  tcpPercent: number
+  udpPercent: number
+}
+
+export interface ProcessTree {
+  rootPid: number
+  rootName: string
+  children: Set<number>
 }
