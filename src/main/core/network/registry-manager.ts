@@ -4,10 +4,12 @@ import {
   PacketMetadata,
   ProcessRegistry,
   ProcDetails,
+  GeoLocationData,
   EmptyStats
 } from '@shared/interfaces/common'
 import { ProcessTracker } from './process-tracker'
 import { ConnectionTracker } from './connection-tracker'
+import { GeoLocationService } from './geo-location'
 import { FRIENDLY_APP_NAMES } from '@config/constants'
 import { logger } from '@infra/logging'
 
@@ -32,6 +34,7 @@ export class RegManager {
   private applicationRegistries: Map<string, ApplicationRegistry> = new Map()
   private processRegistries: Map<string, ProcessRegistry> = new Map()
   private localIPs: Set<string>
+  private geoService: GeoLocationService
 
   constructor(
     private readonly processTracker: ProcessTracker,
@@ -39,6 +42,7 @@ export class RegManager {
     localIPs: string[]
   ) {
     this.localIPs = new Set(localIPs)
+    this.geoService = new GeoLocationService()
   }
 
   processPacket(pkt: PacketMetadata): void {
@@ -116,11 +120,6 @@ export class RegManager {
     this.processRegistries.set(registryId, processRegistry)
     this.addProcessRegistryToApp(appName, registryId)
 
-    logger.debug(`Created ProcessRegistry: ${registryId}`, {
-      pid,
-      appName,
-      isIPv6: this.isIPv6(pkt)
-    })
     return processRegistry
   }
 
@@ -181,7 +180,7 @@ export class RegManager {
       tcpPercent: emptyStats.tcpPercent,
       udpPercent: emptyStats.udpPercent,
       uniqueRemoteIPs: new Set(),
-      //geoLocations: [],
+      geoLocations: [],
       interfaceStats: new Map(),
       firstSeen: Date.now(),
       lastSeen: Date.now()
@@ -214,7 +213,7 @@ export class RegManager {
       tcpPercent: emptyStats.tcpPercent,
       udpPercent: emptyStats.udpPercent,
       uniqueRemoteIPs: new Set(),
-      //geoLocations: [],
+      geoLocations: [],
       interfaceStats: new Map(),
       firstSeen: Date.now(),
       lastSeen: Date.now()
@@ -245,7 +244,7 @@ export class RegManager {
         udpPercent: emptyStats.udpPercent,
         uniqueRemoteIPs: new Set(),
         uniqueDomains: new Set(),
-        //geoLocations: [],
+        geoLocations: [],
         interfaceStats: new Map(),
         firstSeen: Date.now(),
         lastSeen: Date.now(),
@@ -266,6 +265,7 @@ export class RegManager {
     const remoteIP = this.getRemoteIP(pkt)
     if (remoteIP) {
       registry.uniqueRemoteIPs.add(remoteIP)
+      this.updateGeoLocationAsync(registry.geoLocations, remoteIP, pkt)
     }
 
     this.updateInterfaceStats(registry.interfaceStats, pkt)
@@ -283,6 +283,7 @@ export class RegManager {
     }
 
     this.updateInterfaceStats(appRegistry.interfaceStats, pkt)
+    this.aggregateGeoLocations(appRegistry)
   }
 
   private updateStats(
@@ -309,6 +310,91 @@ export class RegManager {
     }
 
     this.calculatePercentages(registry)
+  }
+
+  private updateGeoLocationAsync(
+    geoLocations: GeoLocationData[],
+    ip: string,
+    pkt: PacketMetadata
+  ): void {
+    const direction = this.getDirection(pkt)
+    const size = pkt.size || 0
+
+    this.geoService
+      .lookup(ip)
+      .then((cachedGeoData) => {
+        if (!cachedGeoData.country && !cachedGeoData.city && !cachedGeoData.as) {
+          return
+        }
+
+        const existing = geoLocations.find(
+          (g) =>
+            g.country === cachedGeoData.country &&
+            g.city === cachedGeoData.city &&
+            g.as === cachedGeoData.as
+        )
+
+        if (existing) {
+          existing.packetCount++
+
+          if (!existing.ips) existing.ips = []
+          if (!existing.ips.includes(ip)) {
+            existing.ips.push(ip)
+          }
+          if (direction === 'outbound') {
+            existing.bytesSent += size
+          } else if (direction === 'inbound') {
+            existing.bytesReceived += size
+          }
+        } else {
+          geoLocations.push({
+            ...cachedGeoData,
+            ips: [ip],
+            packetCount: 1,
+            bytesSent: direction === 'outbound' ? size : 0,
+            bytesReceived: direction === 'inbound' ? size : 0
+          })
+        }
+      })
+      .catch((error) => {
+        logger.debug(`Geo lookup failed for ${ip}:`, error)
+      })
+  }
+
+  private aggregateGeoLocations(appRegistry: ApplicationRegistry): void {
+    const aggregatedMap = new Map<string, GeoLocationData>()
+
+    appRegistry.processRegistryIDs.forEach((procId) => {
+      const procReg = this.processRegistries.get(procId)
+      if (!procReg) return
+
+      procReg.geoLocations.forEach((geo) => {
+        const key = `${geo.country || 'Unknown'}-${geo.city || 'Unknown'}-${geo.as || 0}`
+        const existing = aggregatedMap.get(key)
+
+        if (existing) {
+          existing.packetCount += geo.packetCount
+          existing.bytesSent += geo.bytesSent
+          existing.bytesReceived += geo.bytesReceived
+
+          const geoIps = geo.ips || []
+          const existingIps = existing.ips || []
+          geoIps.forEach((ip) => {
+            if (!existingIps.includes(ip)) {
+              existingIps.push(ip)
+            }
+          })
+          existing.ips = existingIps
+        } else {
+          aggregatedMap.set(key, {
+            ...geo,
+            ips: geo.ips ? [...geo.ips] : []
+          })
+        }
+      })
+    })
+
+    appRegistry.geoLocations = Array.from(aggregatedMap.values())
   }
 
   private getRemoteIP(pkt: PacketMetadata): string | null {
@@ -395,5 +481,9 @@ export class RegManager {
     return appRegistry.processRegistryIDs
       .map((id) => this.processRegistries.get(id))
       .filter((reg): reg is ProcessRegistry => reg !== undefined)
+  }
+
+  async close(): Promise<void> {
+    await this.geoService.close()
   }
 }

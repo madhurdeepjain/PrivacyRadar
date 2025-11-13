@@ -160,7 +160,7 @@ export interface ApplicationRegistry {
   udpPercent: number
   uniqueRemoteIPs: Set<string>
   uniqueDomains: Set<string>
-  //geoLocations: GeoLocationData[]
+  geoLocations: GeoLocationData[]
   interfaceStats: Map<
     string,
     {
@@ -197,7 +197,7 @@ export interface ProcessRegistry {
   tcpPercent: number
   udpPercent: number
   uniqueRemoteIPs: Set<string>
-  //geoLocations: GeoLocationData[]
+  geoLocations: GeoLocationData[]
   interfaceStats: Map<
     string,
     {
@@ -225,6 +225,46 @@ export interface EmptyStats {
   ipv6Percent: number
   tcpPercent: number
   udpPercent: number
+}
+
+export interface GeoLocationResponse {
+  country?: string
+  region?: string
+  regionName?: string
+  city?: string
+  zip?: string
+  lat?: number
+  lon?: number
+  timezone?: string
+  isp?: string
+  org?: string
+  as?: string
+  asname?: string
+  mobile?: boolean
+  proxy?: boolean
+  hosting?: boolean
+}
+
+export interface GeoLocationData {
+  country?: string
+  region?: string
+  regionName?: string
+  city?: string
+  zip?: string
+  lat?: number
+  lon?: number
+  timezone?: string
+  isp?: string
+  org?: string
+  as?: string
+  asname?: string
+  mobile?: boolean
+  proxy?: boolean
+  hosting?: boolean
+  ips?: string[]
+  packetCount: number
+  bytesSent: number
+  bytesReceived: number
 }
 
 export interface ProcessTree {
