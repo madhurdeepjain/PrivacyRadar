@@ -53,7 +53,7 @@ export class ProcessTracker {
   private buildProcessTrees(): void {
     this.processTrees.clear()
 
-    this.procCache.forEach((proc, pid) => {
+    this.procCache.forEach((_proc, pid) => {
       const rootPid = this.findRootParent(pid)
 
       if (!this.processTrees.has(rootPid)) {
