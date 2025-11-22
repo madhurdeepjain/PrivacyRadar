@@ -1,6 +1,23 @@
 import { ipcMain } from 'electron'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 
+interface AppTrafficSummary {
+  name: string
+  pid?: number
+  packetCount: number
+  totalBytes?: number
+  lastSeen?: string
+}
+
+interface AiSessionSummaryPayload {
+  summary: {
+    totalBytes?: number
+    uniqueApps: number
+    bytesPerSecond?: number
+  }
+  topApps?: AppTrafficSummary[]
+}
+
 function formatBytes(bytes: number | undefined): string {
   if (!bytes || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -17,7 +34,32 @@ function formatRate(bytesPerSecond: number | undefined): string {
   if (!bytesPerSecond || bytesPerSecond <= 0) return '0 B/s'
   return `${formatBytes(bytesPerSecond)}/s`
 }
-export function registerAiHandlers() {
+
+function extractTextFromLlmResponse(response: unknown): string {
+  if (typeof response === 'string') return response
+
+  if (response && typeof response === 'object' && 'content' in response) {
+    const content = (response as { content: unknown }).content
+
+    if (typeof content === 'string') return content
+
+    if (Array.isArray(content)) {
+      return content
+        .map((chunk) => {
+          if (typeof chunk === 'string') return chunk
+          if (chunk && typeof chunk === 'object' && 'text' in chunk) {
+            return (chunk as { text?: string }).text ?? ''
+          }
+          return ''
+        })
+        .join(' ')
+    }
+  }
+
+  return ''
+}
+
+export function registerAiHandlers(): void {
   const apiKey = process.env.GOOGLE_API_KEY
   console.log('[AI] GOOGLE_API_KEY present in main?', !!apiKey)
 
@@ -29,9 +71,9 @@ export function registerAiHandlers() {
       })
     : null
 
-  ipcMain.handle('ai:explain-session', async (_event, payload) => {
+  ipcMain.handle('ai:explain-session', async (_event, payload: AiSessionSummaryPayload) => {
     const { summary, topApps } = payload
-    const safeTopApps = Array.isArray(topApps) ? topApps.slice(0, 10) : []
+    const safeTopApps: AppTrafficSummary[] = (Array.isArray(topApps) ? topApps : []).slice(0, 10)
     console.log('[AI] explain-session called', {
       hasLlm: !!llm,
       hasKey: !!apiKey,
@@ -63,9 +105,8 @@ Capture summary (pre-processed, do not repeat numbers verbatim, summarize them):
 
 Top apps in this capture (ordered by total bytes, at most 10 shown):
 ${safeTopApps
-  .map(
-    (a: any, i: number) =>
-      `${i + 1}. name=${a.name}, pid=${a.pid ?? 'N/A'}, packets=${a.packetCount}, bytes=${formatBytes(a.totalBytes)}, lastSeen=${a.lastSeen}`
+  .map((a, i) =>
+    `${i + 1}. name=${a.name}, pid=${a.pid ?? 'N/A'}, packets=${a.packetCount}, bytes=${formatBytes(a.totalBytes)}, lastSeen=${a.lastSeen}`
   )
   .join('\n')}
 
@@ -82,19 +123,8 @@ Do not invent apps that are not in the list. If something is labelled UNKNOWN, e
       const model = llm!
       const response = await model.invoke(prompt)
 
-      let text: string
-      if (typeof response === 'string') {
-        text = response
-      } else if (Array.isArray((response as any).content)) {
-        // ChatGoogleGenerativeAI returns a ChatMessage-like object
-        text = (response as any).content
-          .map((c: any) => (typeof c === 'string' ? c : (c?.text ?? '')))
-          .join(' ')
-      } else {
-        text = ((response as any).content ?? '').toString()
-      }
-
-      text = text.trim()
+      const rawText = extractTextFromLlmResponse(response)
+      const text = rawText.trim()
       return text || ''
     } catch (err) {
       console.error('Gemini (LangChain) error in ai:explain-session', err)

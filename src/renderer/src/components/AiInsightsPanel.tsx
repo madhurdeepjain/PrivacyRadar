@@ -80,7 +80,7 @@ export const AiInsightsPanel: React.FC<AiSummaryProps> = ({ summary, topApps, is
     return signals
   }, [hasTraffic, summary.bytesPerSecond, topApps])
 
-  const handleExplain = () => {
+  const handleExplain = (): void => {
     if (!hasTraffic) {
       setState({
         kind: 'error',
@@ -141,7 +141,7 @@ export const AiInsightsPanel: React.FC<AiSummaryProps> = ({ summary, topApps, is
         )
 
         setState({ kind: 'ready', text: lines.join(' '), generatedAt: Date.now() })
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Error generating local AI summary', error)
         setState({
           kind: 'error',
@@ -151,7 +151,7 @@ export const AiInsightsPanel: React.FC<AiSummaryProps> = ({ summary, topApps, is
     }, 450)
   }
 
-  const renderBody = () => {
+  const renderBody = (): React.ReactNode => {
     if (state.kind === 'thinking') {
       return (
         <div
