@@ -18,3 +18,5 @@ out
 playwright-report/
 test-results/
 .playwright/
+.env
+.env

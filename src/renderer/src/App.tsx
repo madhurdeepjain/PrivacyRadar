@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Versions from './components/Versions'
+import { AiInsightsPanel } from './components/AiInsightsPanel'
 import logo from '../../../resources/icon.png'
 import styles from './App.module.css'
 
@@ -66,6 +67,7 @@ function App(): React.JSX.Element {
   const [isSwitchingInterface, setIsSwitchingInterface] = useState(false)
   const [interfaceError, setInterfaceError] = useState<string | null>(null)
   const [captureError, setCaptureError] = useState<string | null>(null)
+  const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false)
   const activityListRef = useRef<HTMLDivElement>(null)
 
   const getInterfaceCategory = (iface: InterfaceOption): string => {
@@ -489,86 +491,149 @@ function App(): React.JSX.Element {
                 ? 'Pause capture'
                 : 'Start capture'}
           </button>
-          <span className={styles.captureState}>
-            {isUpdatingCapture
-              ? isCapturing
-                ? 'Pausing capture'
-                : 'Starting capture'
-              : isCapturing
-                ? 'Capturing live traffic'
-                : 'Capture paused'}
-          </span>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              marginTop: 4
+            }}
+          >
+            <span className={styles.captureState}>
+              {isUpdatingCapture
+                ? isCapturing
+                  ? 'Pausing capture'
+                  : 'Starting capture'
+                : isCapturing
+                  ? 'Capturing live traffic'
+                  : 'Capture paused'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsAiSidebarOpen((open) => !open)}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'transparent',
+                color: '#fff',
+                fontSize: 11,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              AI insights
+            </button>
+          </div>
           {captureError && <span className={styles.errorText}>{captureError}</span>}
         </div>
 
         <div className={styles.interfaceSection}>
-          <div className={styles.sectionHeading}>
-            <div>
-              <span className={styles.sectionLabel} id="interface-select">
-                Interfaces
-              </span>
-              <span className={styles.sectionSummary}>{selectionSummary}</span>
-            </div>
-          </div>
-          {interfaces.length === 0 ? (
-            <div className={styles.interfaceEmpty}>No interfaces detected</div>
+          {isAiSidebarOpen ? (
+            <>
+              <div className={styles.sectionHeading}>
+                <div>
+                  <span className={styles.sectionLabel}>AI Insights</span>
+                  <span className={styles.sectionSummary}>
+                    Privacy-focused view of this capture
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={() => setIsAiSidebarOpen(false)}
+                >
+                  Back to interfaces
+                </button>
+              </div>
+              <div className={styles.interfaceList}>
+                <AiInsightsPanel
+                  summary={summary}
+                  topApps={topApps} 
+                  isCapturing={isCapturing} 
+                />
+              </div>
+            </>
           ) : (
             <>
-              {isSwitchingInterface && (
-                <span className={styles.sectionNote}>Updating selection...</span>
-              )}
-              {interfaceError && <span className={styles.errorText}>{interfaceError}</span>}
-              <div className={styles.interfaceList} role="group" aria-labelledby="interface-select">
-                {orderedInterfaceGroups.map(([category, items]) => {
-                  const selectedCount = items.filter((iface) =>
-                    selectedInterfaces.includes(iface.name)
-                  ).length
-
-                  return (
-                    <div key={category} className={styles.interfaceGroup}>
-                      <div className={styles.interfaceGroupHeader}>
-                        <span>{category}</span>
-                        <span>
-                          {selectedCount}/{items.length}
-                        </span>
-                      </div>
-                      <ul className={styles.interfaceGroupList}>
-                        {items.map((iface) => {
-                          const checked = selectedInterfaces.includes(iface.name)
-                          return (
-                            <li key={iface.name} className={styles.interfaceGroupItem}>
-                              <label className={styles.interfaceCheckboxLabel}>
-                                <input
-                                  type="checkbox"
-                                  className={styles.interfaceCheckbox}
-                                  checked={checked}
-                                  disabled={isSwitchingInterface || isUpdatingCapture}
-                                  onChange={async (event) => {
-                                    await handleInterfaceToggle(iface.name, event.target.checked)
-                                  }}
-                                />
-                                <span>{renderInterfaceOptionLabel(iface)}</span>
-                              </label>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </div>
-                  )
-                })}
+              <div className={styles.sectionHeading}>
+                <div>
+                  <span className={styles.sectionLabel} id="interface-select">
+                    Interfaces
+                  </span>
+                  <span className={styles.sectionSummary}>{selectionSummary}</span>
+                </div>
               </div>
-              <button
-                type="button"
-                className={styles.secondaryButton}
-                onClick={handleSelectAll}
-                disabled={
-                  isSwitchingInterface ||
-                  isUpdatingCapture ||
-                  selectedInterfaces.length === interfaces.length
-                }
-              >
-                Select all
-              </button>
+              {interfaces.length === 0 ? (
+                <div className={styles.interfaceEmpty}>No interfaces detected</div>
+              ) : (
+                <>
+                  {isSwitchingInterface && (
+                    <span className={styles.sectionNote}>Updating selection...</span>
+                  )}
+                  {interfaceError && <span className={styles.errorText}>{interfaceError}</span>}
+                  <div
+                    className={styles.interfaceList}
+                    role="group"
+                    aria-labelledby="interface-select"
+                  >
+                    {orderedInterfaceGroups.map(([category, items]) => {
+                      const selectedCount = items.filter((iface) =>
+                        selectedInterfaces.includes(iface.name)
+                      ).length
+
+                      return (
+                        <div key={category} className={styles.interfaceGroup}>
+                          <div className={styles.interfaceGroupHeader}>
+                            <span>{category}</span>
+                            <span>
+                              {selectedCount}/{items.length}
+                            </span>
+                          </div>
+                          <ul className={styles.interfaceGroupList}>
+                            {items.map((iface) => {
+                              const checked = selectedInterfaces.includes(iface.name)
+                              return (
+                                <li key={iface.name} className={styles.interfaceGroupItem}>
+                                  <label className={styles.interfaceCheckboxLabel}>
+                                    <input
+                                      type="checkbox"
+                                      className={styles.interfaceCheckbox}
+                                      checked={checked}
+                                      disabled={
+                                        isSwitchingInterface || isUpdatingCapture
+                                      }
+                                      onChange={async (event) => {
+                                        await handleInterfaceToggle(
+                                          iface.name,
+                                          event.target.checked
+                                        )
+                                      }}
+                                    />
+                                    <span>{renderInterfaceOptionLabel(iface)}</span>
+                                  </label>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={handleSelectAll}
+                    disabled={
+                      isSwitchingInterface ||
+                      isUpdatingCapture ||
+                      selectedInterfaces.length === interfaces.length
+                    }
+                  >
+                    Select all
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>

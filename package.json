@@ -34,12 +34,18 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@langchain/google-genai": "^1.0.3",
     "better-sqlite3": "^12.4.1",
     "cap": "^0.2.1",
+    "dotenv": "^17.2.3",
     "drizzle-orm": "^0.44.5",
     "electron-updater": "^6.3.9",
+    "framer-motion": "^12.23.24",
+    "langchain": "^1.0.6",
+    "lucide-react": "^0.554.0",
     "pino": "^10.0.0",
-    "ps-list": "^8.1.1"
+    "ps-list": "^8.1.1",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
