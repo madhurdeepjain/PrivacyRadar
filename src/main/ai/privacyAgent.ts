@@ -4,6 +4,10 @@ import { z } from 'zod'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import { AiSessionInsight, SessionSummary } from './types'
 
+interface InvokableLlm {
+  invoke: (input: unknown) => Promise<{ content?: unknown }>
+}
+
 // Validate and harden model output.
 const flowCategoryEnum = z.enum([
   'telemetry',
@@ -57,7 +61,8 @@ Return a JSON object with:
 Return ONLY valid JSON.
 `
 
-  const response = await model.invoke([
+  const invokable = model as unknown as InvokableLlm
+  const response = await invokable.invoke([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt }
   ])

@@ -59,6 +59,10 @@ function extractTextFromLlmResponse(response: unknown): string {
   return ''
 }
 
+interface InvokableLlm {
+  invoke: (input: unknown) => Promise<unknown>
+}
+
 export function registerAiHandlers(): void {
   const apiKey = process.env.GOOGLE_API_KEY
   console.log('[AI] GOOGLE_API_KEY present in main?', !!apiKey)
@@ -121,8 +125,8 @@ Do not invent apps that are not in the list. If something is labelled UNKNOWN, e
 `.trim()
     try {
       // we bailed out above if llm or apiKey were missing
-      const model = llm!
-      const response = await model.invoke(prompt)
+      const invokable = llm as unknown as InvokableLlm
+      const response = await invokable.invoke(prompt)
 
       const rawText = extractTextFromLlmResponse(response)
       const text = rawText.trim()
