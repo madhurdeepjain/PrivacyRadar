@@ -105,8 +105,9 @@ Capture summary (pre-processed, do not repeat numbers verbatim, summarize them):
 
 Top apps in this capture (ordered by total bytes, at most 10 shown):
 ${safeTopApps
-  .map((a, i) =>
-    `${i + 1}. name=${a.name}, pid=${a.pid ?? 'N/A'}, packets=${a.packetCount}, bytes=${formatBytes(a.totalBytes)}, lastSeen=${a.lastSeen}`
+  .map(
+    (a, i) =>
+      `${i + 1}. name=${a.name}, pid=${a.pid ?? 'N/A'}, packets=${a.packetCount}, bytes=${formatBytes(a.totalBytes)}, lastSeen=${a.lastSeen}`
   )
   .join('\n')}
 
