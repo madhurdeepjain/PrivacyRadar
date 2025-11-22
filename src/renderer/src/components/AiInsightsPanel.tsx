@@ -39,11 +39,7 @@ const formatTimeAgo = (timestamp?: number): string => {
   return new Date(timestamp).toLocaleTimeString()
 }
 
-export const AiInsightsPanel: React.FC<AiSummaryProps> = ({
-  summary,
-  topApps,
-  isCapturing
-}) => {
+export const AiInsightsPanel: React.FC<AiSummaryProps> = ({ summary, topApps, isCapturing }) => {
   const [state, setState] = useState<InsightState>({ kind: 'idle' })
 
   const hasTraffic = summary.totalBytes > 0 && summary.uniqueApps > 0
@@ -73,9 +69,7 @@ export const AiInsightsPanel: React.FC<AiSummaryProps> = ({
     if (topApps.length > 0) {
       const primary = topApps[0]
       signals.push(
-        `${primary.name} is the most active app with ${formatBytes(
-          primary.totalBytes
-        )} observed`
+        `${primary.name} is the most active app with ${formatBytes(primary.totalBytes)} observed`
       )
     }
 
@@ -130,11 +124,7 @@ export const AiInsightsPanel: React.FC<AiSummaryProps> = ({
             .filter(Boolean)
 
           if (secondaryNames.length > 0) {
-            lines.push(
-              `Other notable apps in this session include ${secondaryNames.join(
-                ', '
-              )}.`
-            )
+            lines.push(`Other notable apps in this session include ${secondaryNames.join(', ')}.`)
           }
         }
 
@@ -232,8 +222,8 @@ export const AiInsightsPanel: React.FC<AiSummaryProps> = ({
         >
           <p style={{ fontSize: 13, color: '#fecaca' }}>{state.message}</p>
           <p style={{ fontSize: 11, color: '#9ca3af' }}>
-            If capture is running, generate some traffic (for example, open a few sites or apps)
-            and try again.
+            If capture is running, generate some traffic (for example, open a few sites or apps) and
+            try again.
           </p>
         </div>
       )

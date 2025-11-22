@@ -1,11 +1,10 @@
-import { registerAiHandlers } from "./ai/ipcHandlers";
+import { registerAiHandlers } from './ai/ipcHandlers'
 import { startApp } from '@app/bootstrap'
 import { logger } from '@infra/logging'
-import 'dotenv/config' 
+import 'dotenv/config'
 
 // register AI IPC handlers
-registerAiHandlers();
-
+registerAiHandlers()
 
 startApp().catch((error) => {
   logger.error('Failed to bootstrap application', error)

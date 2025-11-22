@@ -547,11 +547,7 @@ function App(): React.JSX.Element {
                 </button>
               </div>
               <div className={styles.interfaceList}>
-                <AiInsightsPanel
-                  summary={summary}
-                  topApps={topApps} 
-                  isCapturing={isCapturing} 
-                />
+                <AiInsightsPanel summary={summary} topApps={topApps} isCapturing={isCapturing} />
               </div>
             </>
           ) : (
@@ -600,9 +596,7 @@ function App(): React.JSX.Element {
                                       type="checkbox"
                                       className={styles.interfaceCheckbox}
                                       checked={checked}
-                                      disabled={
-                                        isSwitchingInterface || isUpdatingCapture
-                                      }
+                                      disabled={isSwitchingInterface || isUpdatingCapture}
                                       onChange={async (event) => {
                                         await handleInterfaceToggle(
                                           iface.name,

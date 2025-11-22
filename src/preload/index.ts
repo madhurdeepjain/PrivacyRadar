@@ -44,20 +44,18 @@ if (process.contextIsolated) {
 
 // Types for AI result.
 interface AiSessionInsight {
-  narrativeSummary: string;
+  narrativeSummary: string
   topRisks: {
-    appName: string;
-    overallRisk: "low" | "medium" | "high";
-    categories: string[];
-    explanation: string;
-  }[];
+    appName: string
+    overallRisk: 'low' | 'medium' | 'high'
+    categories: string[]
+    explanation: string
+  }[]
 }
 
 // Sujal: expose AI bridge to renderer.
-contextBridge.exposeInMainWorld("privacyAI", {
-  explainSession: async (
-    timeWindowMinutes?: number
-  ): Promise<AiSessionInsight> => {
-    return ipcRenderer.invoke("ai:explain-session", timeWindowMinutes);
-  },
-});
+contextBridge.exposeInMainWorld('privacyAI', {
+  explainSession: async (timeWindowMinutes?: number): Promise<AiSessionInsight> => {
+    return ipcRenderer.invoke('ai:explain-session', timeWindowMinutes)
+  }
+})

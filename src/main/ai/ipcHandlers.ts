@@ -88,7 +88,7 @@ Do not invent apps that are not in the list. If something is labelled UNKNOWN, e
       } else if (Array.isArray((response as any).content)) {
         // ChatGoogleGenerativeAI returns a ChatMessage-like object
         text = (response as any).content
-          .map((c: any) => (typeof c === 'string' ? c : c?.text ?? ''))
+          .map((c: any) => (typeof c === 'string' ? c : (c?.text ?? '')))
           .join(' ')
       } else {
         text = ((response as any).content ?? '').toString()

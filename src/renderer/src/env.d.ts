@@ -3,18 +3,18 @@
 // Extra types for the renderer window object.
 
 interface AiSessionInsight {
-  narrativeSummary: string;
+  narrativeSummary: string
   topRisks: {
-    appName: string;
-    overallRisk: "low" | "medium" | "high";
-    categories: string[];
-    explanation: string;
-  }[];
+    appName: string
+    overallRisk: 'low' | 'medium' | 'high'
+    categories: string[]
+    explanation: string
+  }[]
 }
 
 interface Window {
   // Bridge exposed from preload.
   privacyAI?: {
-    explainSession: (timeWindowMinutes?: number) => Promise<AiSessionInsight>;
-  };
+    explainSession: (timeWindowMinutes?: number) => Promise<AiSessionInsight>
+  }
 }
