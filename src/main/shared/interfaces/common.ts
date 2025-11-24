@@ -272,3 +272,25 @@ export interface ProcessTree {
   rootName: string
   children: Set<number>
 }
+
+// TCC (Transparency, Consent, and Control) Privacy Monitoring
+export interface TCCEvent {
+  id: string
+  timestamp: Date
+  app: string
+  appName: string
+  bundleId: string
+  path: string
+  service: string
+  allowed: boolean
+  authValue: number
+  authReason: string
+  pid: number
+  userId: number
+  // Event type: 'request' = asking for permission, 'usage' = actively using resource
+  eventType: 'request' | 'usage'
+  // Session tracking (only for usage events)
+  sessionStart?: Date
+  sessionEnd?: Date
+  duration?: number // in seconds
+}
