@@ -48,16 +48,6 @@ export class RegManager {
   processPacket(pkt: PacketMetadata): void {
     this.updateGlobalStats(pkt)
 
-    if (pkt.procName === 'SYSTEM' || pkt.pid === -1) {
-      this.tagPacket(pkt, 'system', 'System', 'System')
-      return
-    }
-
-    if (!pkt.pid || pkt.procName?.startsWith('UNKNOWN')) {
-      this.tagPacket(pkt, 'unknown', 'Unknown', 'Unknown')
-      return
-    }
-
     const processRegistry = this.resolveProcessRegistry(pkt)
     this.updateProcessRegistryStats(processRegistry, pkt)
     this.updateApplicationRegistryStats(processRegistry.appName, pkt)
@@ -77,19 +67,7 @@ export class RegManager {
       const emptyStats = createEmptyStats()
       this.globalRegistry.set(interfaceName, {
         interfaceName,
-        totalPackets: emptyStats.totalPackets,
-        totalBytesSent: emptyStats.totalBytesSent,
-        totalBytesReceived: emptyStats.totalBytesReceived,
-        ipv4Packets: emptyStats.ipv4Packets,
-        ipv6Packets: emptyStats.ipv6Packets,
-        tcpPackets: emptyStats.tcpPackets,
-        udpPackets: emptyStats.udpPackets,
-        ipv4Percent: emptyStats.ipv4Percent,
-        ipv6Percent: emptyStats.ipv6Percent,
-        tcpPercent: emptyStats.tcpPercent,
-        udpPercent: emptyStats.udpPercent,
-        inboundBytes: emptyStats.inboundBytes,
-        outboundBytes: emptyStats.outboundBytes,
+        ...emptyStats,
         firstSeen: Date.now(),
         lastSeen: Date.now()
       })
@@ -99,28 +77,135 @@ export class RegManager {
   }
 
   private resolveProcessRegistry(pkt: PacketMetadata): ProcessRegistry {
-    const pid = pkt.pid!
-    const registryId = this.generateRegistryId(pid)
+    const classification = this.classifyPacket(pkt)
+    const registryId = this.generateRegistryId(classification)
 
     if (this.processRegistries.has(registryId)) {
       return this.processRegistries.get(registryId)!
     }
 
+    const processRegistry = this.createProcessRegistry(registryId, classification)
+    this.processRegistries.set(registryId, processRegistry)
+    this.addProcessRegistryToApp(processRegistry.appName, processRegistry.appName, registryId)
+
+    return processRegistry
+  }
+
+  private classifyPacket(pkt: PacketMetadata): {
+    pid: number
+    appName: string
+    appDisplayName: string
+    procName: string
+    isSystem: boolean
+    isUnknown: boolean
+  } {
+    if (this.isSystemTraffic(pkt)) {
+      return {
+        pid: pkt.pid || 0,
+        appName: 'System',
+        appDisplayName: 'System',
+        procName: 'System',
+        isSystem: true,
+        isUnknown: false
+      }
+    }
+
+    if (!pkt.pid || pkt.procName?.startsWith('UNKNOWN')) {
+      return {
+        pid: pkt.pid || -1,
+        appName: 'Unknown',
+        appDisplayName: 'Unknown',
+        procName: pkt.procName || 'Unknown',
+        isSystem: false,
+        isUnknown: true
+      }
+    }
+
+    const pid = pkt.pid
     const proc = this.getProcessFromConnection(pkt) || this.processTracker.getProcess(pid)
 
     if (!proc) {
-      return this.createFallbackProcessRegistry(pid, pkt.procName || 'Unknown')
+      return {
+        pid,
+        appName: pkt.procName || 'Unknown',
+        appDisplayName: pkt.procName || 'Unknown',
+        procName: pkt.procName || 'Unknown',
+        isSystem: false,
+        isUnknown: false
+      }
     }
 
     const rootPID = this.processTracker.findRootParent(pid)
     const rootProc = this.processTracker.getProcess(rootPID)
     const appName = rootProc ? this.getFriendlyName(rootProc.name) : this.getFriendlyName(proc.name)
 
-    const processRegistry = this.createProcessRegistry(registryId, appName, proc)
-    this.processRegistries.set(registryId, processRegistry)
-    this.addProcessRegistryToApp(appName, registryId)
+    return {
+      pid,
+      appName,
+      appDisplayName: appName,
+      procName: proc.name,
+      isSystem: false,
+      isUnknown: false
+    }
+  }
 
-    return processRegistry
+  private isSystemTraffic(pkt: PacketMetadata): boolean {
+    if (pkt.procName === 'SYSTEM' || pkt.pid === 0 || pkt.pid === 4) {
+      return true
+    }
+
+    //System/Network protocols not linked to a process
+    const protocol = pkt.protocol?.toLowerCase()
+    if (!pkt.pid && (protocol === 'arp' || protocol === 'icmp' || protocol === 'icmpv6')) {
+      return true
+    }
+
+    return false
+  }
+
+  private generateRegistryId(classification: {
+    pid: number
+    appName: string
+    isSystem: boolean
+    isUnknown: boolean
+  }): string {
+    if (classification.isSystem) {
+      return 'system'
+    }
+
+    if (classification.isUnknown) {
+      return 'unknown'
+    }
+
+    return `${classification.appName.toLowerCase().replace(/\s+/g, '-')}-${classification.pid}`
+  }
+
+  private createProcessRegistry(
+    id: string,
+    classification: {
+      pid: number
+      appName: string
+      appDisplayName: string
+      procName: string
+      isSystem: boolean
+      isUnknown: boolean
+    }
+  ): ProcessRegistry {
+    const emptyStats = createEmptyStats()
+    return {
+      id,
+      appName: classification.appName,
+      pid: classification.pid,
+      parentPID: 0,
+      procName: classification.procName,
+      isRootProcess: true,
+      ...emptyStats,
+      uniqueRemoteIPs: new Set(),
+      geoLocations: [],
+      interfaceStats: new Map(),
+      firstSeen: Date.now(),
+      lastSeen: Date.now()
+    }
   }
 
   private getProcessFromConnection(pkt: PacketMetadata): ProcDetails | null {
@@ -145,103 +230,17 @@ export class RegManager {
     return null
   }
 
-  private generateRegistryId(pid: number): string {
-    const proc = this.processTracker.getProcess(pid)
-    if (!proc) return `unknown-${pid}`
-
-    const rootPID = this.processTracker.findRootParent(pid)
-    const rootProc = this.processTracker.getProcess(rootPID)
-    const appName = rootProc ? this.getFriendlyName(rootProc.name) : 'unknown'
-
-    return `${appName.toLowerCase().replace(/\s+/g, '-')}-${pid}`
-  }
-
-  private createProcessRegistry(id: string, appName: string, proc: ProcDetails): ProcessRegistry {
-    const emptyStats = createEmptyStats()
-    return {
-      id,
-      appName,
-      pid: proc.pid,
-      parentPID: proc.ppid || 0,
-      procName: proc.name,
-      exePath: proc.cmd,
-      isRootProcess: (proc.ppid || 0) === 0,
-      totalPackets: emptyStats.totalPackets,
-      totalBytesSent: emptyStats.totalBytesSent,
-      totalBytesReceived: emptyStats.totalBytesReceived,
-      inboundBytes: emptyStats.inboundBytes,
-      outboundBytes: emptyStats.outboundBytes,
-      ipv4Packets: emptyStats.ipv4Packets,
-      ipv6Packets: emptyStats.ipv6Packets,
-      tcpPackets: emptyStats.tcpPackets,
-      udpPackets: emptyStats.udpPackets,
-      ipv4Percent: emptyStats.ipv4Percent,
-      ipv6Percent: emptyStats.ipv6Percent,
-      tcpPercent: emptyStats.tcpPercent,
-      udpPercent: emptyStats.udpPercent,
-      uniqueRemoteIPs: new Set(),
-      geoLocations: [],
-      interfaceStats: new Map(),
-      firstSeen: Date.now(),
-      lastSeen: Date.now()
-    }
-  }
-
-  private createFallbackProcessRegistry(pid: number, procName: string): ProcessRegistry {
-    const id = `unknown-${pid}`
-    const appName = procName || 'Unknown'
-    const emptyStats = createEmptyStats()
-
-    const registry: ProcessRegistry = {
-      id,
-      appName,
-      pid,
-      parentPID: 0,
-      procName,
-      isRootProcess: true,
-      totalPackets: emptyStats.totalPackets,
-      totalBytesSent: emptyStats.totalBytesSent,
-      totalBytesReceived: emptyStats.totalBytesReceived,
-      inboundBytes: emptyStats.inboundBytes,
-      outboundBytes: emptyStats.outboundBytes,
-      ipv4Packets: emptyStats.ipv4Packets,
-      ipv6Packets: emptyStats.ipv6Packets,
-      tcpPackets: emptyStats.tcpPackets,
-      udpPackets: emptyStats.udpPackets,
-      ipv4Percent: emptyStats.ipv4Percent,
-      ipv6Percent: emptyStats.ipv6Percent,
-      tcpPercent: emptyStats.tcpPercent,
-      udpPercent: emptyStats.udpPercent,
-      uniqueRemoteIPs: new Set(),
-      geoLocations: [],
-      interfaceStats: new Map(),
-      firstSeen: Date.now(),
-      lastSeen: Date.now()
-    }
-    this.processRegistries.set(id, registry)
-    this.addProcessRegistryToApp(appName, id)
-    return registry
-  }
-
-  private addProcessRegistryToApp(appName: string, processRegistryId: string): void {
+  private addProcessRegistryToApp(
+    appName: string,
+    appDisplayName: string,
+    processRegistryId: string
+  ): void {
     if (!this.applicationRegistries.has(appName)) {
       const emptyStats = createEmptyStats()
       this.applicationRegistries.set(appName, {
         appName,
-        appDisplayName: appName,
-        totalPackets: emptyStats.totalPackets,
-        totalBytesSent: emptyStats.totalBytesSent,
-        totalBytesReceived: emptyStats.totalBytesReceived,
-        inboundBytes: emptyStats.inboundBytes,
-        outboundBytes: emptyStats.outboundBytes,
-        ipv4Packets: emptyStats.ipv4Packets,
-        ipv6Packets: emptyStats.ipv6Packets,
-        tcpPackets: emptyStats.tcpPackets,
-        udpPackets: emptyStats.udpPackets,
-        ipv4Percent: emptyStats.ipv4Percent,
-        ipv6Percent: emptyStats.ipv6Percent,
-        tcpPercent: emptyStats.tcpPercent,
-        udpPercent: emptyStats.udpPercent,
+        appDisplayName,
+        ...emptyStats,
         uniqueRemoteIPs: new Set(),
         uniqueDomains: new Set(),
         geoLocations: [],

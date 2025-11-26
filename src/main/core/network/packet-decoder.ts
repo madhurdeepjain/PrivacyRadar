@@ -28,6 +28,7 @@ export class PacketDecoder {
 
     let ipOffset = eth.offset
     let ipProtocol: number | null = null
+    let payloadOffset = ipOffset
 
     if (eth.info.type === this.PROTOCOL.ETHERNET.IPV4) {
       const ipv4 = this.decoders.IPV4(buffer, ipOffset)
@@ -49,6 +50,7 @@ export class PacketDecoder {
       }
       ipProtocol = ipv4.info.protocol
       ipOffset = ipv4.offset
+      payloadOffset = ipv4.offset
     } else if (eth.info.type === this.PROTOCOL.ETHERNET.IPV6) {
       const ipv6 = this.decoders.IPV6(buffer, ipOffset)
       metadata.srcIP = formatIPv6Address(ipv6.info.srcaddr)
@@ -64,6 +66,7 @@ export class PacketDecoder {
       }
       ipProtocol = ipv6.info.protocol
       ipOffset = ipv6.offset
+      payloadOffset = ipv6.offset
     }
 
     if (ipProtocol === 6) {
@@ -82,6 +85,7 @@ export class PacketDecoder {
       metadata.protocol = 'tcp'
       metadata.srcPortService = WK_PORTS[tcp.info.srcport] ?? 'Unknown'
       metadata.dstPortService = WK_PORTS[tcp.info.dstport] ?? 'Unknown'
+      payloadOffset = tcp.offset
     } else if (ipProtocol === 17) {
       const udp = this.decoders.UDP(buffer, ipOffset)
       metadata.udp = {
@@ -95,8 +99,13 @@ export class PacketDecoder {
       metadata.srcPortService = WK_PORTS[udp.info.srcport] ?? 'Unknown'
       metadata.dstPortService = WK_PORTS[udp.info.dstport] ?? 'Unknown'
       metadata.protocol = 'udp'
+      payloadOffset = udp.offset
     } else if (ipProtocol !== null) {
       metadata.protocol = IP_PROTOCOLS[ipProtocol]?.toUpperCase() ?? `IP-${ipProtocol}`
+    }
+
+    if (payloadOffset < nbytes) {
+      metadata.payload = buffer.slice(payloadOffset, nbytes).toString('hex')
     }
 
     return metadata
