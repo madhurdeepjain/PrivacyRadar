@@ -5,9 +5,9 @@ import { StatCard } from './StatCard'
 import { InterfaceSelector } from './InterfaceSelector'
 import { AppInsights } from './AppInsights'
 import { ActivityList } from './ActivityList'
-import { PacketData, AppStats, InterfaceOption, InterfaceSelectionResult } from '../types'
+import { PacketData, AppStats, InterfaceOption } from '../types'
 
-export function NetworkMonitor() {
+export function NetworkMonitor(): JSX.Element {
   // State
   const [packets, setPackets] = useState<PacketData[]>([])
   const [packetCount, setPacketCount] = useState(0)
@@ -15,14 +15,14 @@ export function NetworkMonitor() {
   const [appStatsMap, setAppStatsMap] = useState<Record<string, AppStats>>({})
   const [bytesPerSecond, setBytesPerSecond] = useState(0)
   const throughputSamplesRef = useRef<Array<{ timestamp: number; size: number }>>([])
-  
+
   const [isCapturing, setIsCapturing] = useState(false)
   const [isUpdatingCapture, setIsUpdatingCapture] = useState(false)
-  
+
   const [interfaces, setInterfaces] = useState<InterfaceOption[]>([])
   const [selectedInterfaces, setSelectedInterfaces] = useState<string[]>([])
   const [isSwitchingInterface, setIsSwitchingInterface] = useState(false)
-  
+
   const [showSettings, setShowSettings] = useState(false)
 
   // Derived State
@@ -32,18 +32,18 @@ export function NetworkMonitor() {
 
   // API: Initialize Interfaces
   useEffect(() => {
-    const init = async () => {
+    const init = async (): Promise<void> => {
       try {
         const result = await window.api.getNetworkInterfaces()
         setInterfaces(result.interfaces)
         setSelectedInterfaces(
-          result.selectedInterfaceNames.length > 0 
-            ? result.selectedInterfaceNames 
-            : result.interfaces.map(i => i.name)
+          result.selectedInterfaceNames.length > 0
+            ? result.selectedInterfaceNames
+            : result.interfaces.map((i) => i.name)
         )
         setIsCapturing(result.isCapturing)
       } catch (err) {
-        console.error("Failed to load interfaces", err)
+        console.error('Failed to load interfaces', err)
       }
     }
     init()
@@ -51,17 +51,17 @@ export function NetworkMonitor() {
 
   // API: Network Data Listener
   useEffect(() => {
-    const handleData = (data: PacketData) => {
-      setPacketCount(p => p + 1)
-      setPackets(prev => [data, ...prev].slice(0, 500))
-      setTotalBytes(p => p + data.size)
+    const handleData = (data: PacketData): void => {
+      setPacketCount((p) => p + 1)
+      setPackets((prev) => [data, ...prev].slice(0, 500))
+      setTotalBytes((p) => p + data.size)
 
       // App Stats
-      setAppStatsMap(prev => {
+      setAppStatsMap((prev) => {
         const appName = data.procName || 'UNKNOWN'
         const key = `${appName}-${data.pid ?? 'N/A'}`
         const existing = prev[key]
-        
+
         if (existing) {
           return {
             ...prev,
@@ -89,13 +89,13 @@ export function NetworkMonitor() {
       const now = data.timestamp
       const samples = throughputSamplesRef.current
       samples.push({ timestamp: now, size: data.size })
-      
+
       // Cleanup old samples (30s window)
       const windowStart = now - 30000
       while (samples.length > 0 && samples[0].timestamp < windowStart) {
         samples.shift()
       }
-      
+
       // Calculate rate
       if (samples.length > 0) {
         const recentBytes = samples.reduce((acc, s) => acc + s.size, 0)
@@ -117,7 +117,7 @@ export function NetworkMonitor() {
     const interval = setInterval(() => {
       const samples = throughputSamplesRef.current
       if (samples.length === 0) {
-        setBytesPerSecond(b => (b > 0 ? 0 : b))
+        setBytesPerSecond((b) => (b > 0 ? 0 : b))
         return
       }
       const now = Date.now()
@@ -137,25 +137,23 @@ export function NetworkMonitor() {
   }, [])
 
   // Actions
-  const handleToggleCapture = async () => {
+  const handleToggleCapture = async (): Promise<void> => {
     setIsUpdatingCapture(true)
     try {
-      const result = isCapturing 
-        ? await window.api.stopCapture() 
-        : await window.api.startCapture()
+      const result = isCapturing ? await window.api.stopCapture() : await window.api.startCapture()
       setIsCapturing(result.isCapturing)
       if (!result.isCapturing) {
         setBytesPerSecond(0)
         throughputSamplesRef.current = []
       }
     } catch (err) {
-      console.error("Capture toggle failed", err)
+      console.error('Capture toggle failed', err)
     } finally {
       setIsUpdatingCapture(false)
     }
   }
 
-  const handleInterfaceChange = async (nextSelection: string[]) => {
+  const handleInterfaceChange = async (nextSelection: string[]): Promise<void> => {
     setIsSwitchingInterface(true)
     try {
       const result = await window.api.selectNetworkInterface(nextSelection)
@@ -163,20 +161,20 @@ export function NetworkMonitor() {
       setSelectedInterfaces(result.selectedInterfaceNames)
       setIsCapturing(result.isCapturing)
     } catch (err) {
-      console.error("Interface selection failed", err)
+      console.error('Interface selection failed', err)
     } finally {
       setIsSwitchingInterface(false)
     }
   }
 
   // Formatters
-  const formatRate = (bps: number) => {
+  const formatRate = (bps: number): string => {
     if (bps < 1024) return `${bps.toFixed(0)} B/s`
     if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(1)} KB/s`
     return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`
   }
 
-  const formatTotal = (bytes: number) => {
+  const formatTotal = (bytes: number): string => {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
@@ -195,7 +193,7 @@ export function NetworkMonitor() {
             variant="outline"
             size="sm"
             onClick={() => setShowSettings(!showSettings)}
-            className={showSettings ? "bg-accent" : ""}
+            className={showSettings ? 'bg-accent' : ''}
           >
             <Settings2 className="mr-2 h-4 w-4" />
             Interfaces
@@ -203,11 +201,11 @@ export function NetworkMonitor() {
           <Button
             onClick={handleToggleCapture}
             disabled={isUpdatingCapture || isSwitchingInterface || interfaces.length === 0}
-            variant={isCapturing ? "destructive" : "default"}
+            variant={isCapturing ? 'destructive' : 'default'}
             className="w-32"
           >
             {isUpdatingCapture ? (
-              "Updating..."
+              'Updating...'
             ) : isCapturing ? (
               <>
                 <Pause className="mr-2 h-4 w-4" /> Pause
@@ -230,13 +228,13 @@ export function NetworkMonitor() {
             isCapturing={isCapturing}
             isSwitching={isSwitchingInterface}
             onToggle={(name, checked) => {
-              const next = checked 
+              const next = checked
                 ? [...selectedInterfaces, name]
-                : selectedInterfaces.filter(n => n !== name)
+                : selectedInterfaces.filter((n) => n !== name)
               if (next.length > 0) handleInterfaceChange(next)
             }}
             onSelectAll={() => {
-              handleInterfaceChange(interfaces.map(i => i.name))
+              handleInterfaceChange(interfaces.map((i) => i.name))
             }}
           />
         </div>
@@ -276,17 +274,16 @@ export function NetworkMonitor() {
         <div className="md:col-span-4 flex flex-col min-h-0">
           <ActivityList packets={packets} className="flex-1 flex flex-col min-h-0" />
         </div>
-        
+
         {/* Right: Live Packet Feed (3 cols) -> Swapped, actually ActivityList is packets. AppInsights is apps. */}
         {/* Let's swap: ActivityList (Live) on left/bottom? No, maybe side by side. */}
         {/* The user wants "Map" too. I don't have a map component yet. */}
         {/* I'll put AppInsights on the right side as a summary, and Packet List on the left as main feed. */}
-        
+
         <div className="md:col-span-3 flex flex-col min-h-0">
-           <AppInsights apps={appStats} />
+          <AppInsights apps={appStats} />
         </div>
       </div>
     </div>
   )
 }
-

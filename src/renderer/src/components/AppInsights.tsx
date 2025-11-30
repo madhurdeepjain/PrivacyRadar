@@ -8,7 +8,7 @@ interface AppInsightsProps {
   apps: AppStats[]
 }
 
-export function AppInsights({ apps }: AppInsightsProps) {
+export function AppInsights({ apps }: AppInsightsProps): JSX.Element {
   const topApps = useMemo(() => apps.slice(0, 8), [apps])
 
   const formatBytes = (bytes: number): string => {
@@ -53,7 +53,7 @@ export function AppInsights({ apps }: AppInsightsProps) {
       </CardHeader>
       <CardContent className="flex-1 overflow-auto no-scrollbar pr-2">
         <div className="space-y-4">
-          {topApps.map((app, index) => (
+          {topApps.map((app) => (
             <div
               key={`${app.name}-${app.pid}`}
               className="flex items-center justify-between rounded-lg border p-3 hover:bg-accent/50 transition-colors"

@@ -49,4 +49,3 @@ export interface AppStats {
   totalBytes: number
   lastSeen: number
 }
-

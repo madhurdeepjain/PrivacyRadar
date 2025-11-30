@@ -22,7 +22,7 @@ export function InterfaceSelector({
   isSwitching,
   onToggle,
   onSelectAll
-}: InterfaceSelectorProps) {
+}: InterfaceSelectorProps): JSX.Element {
   const getInterfaceCategory = (iface: InterfaceOption): string => {
     const name = iface.name.toLowerCase()
     const description = (iface.description || '').toLowerCase()
@@ -85,7 +85,7 @@ export function InterfaceSelector({
     return entries
   }, [groupedInterfaces])
 
-  const getIconForCategory = (category: string) => {
+  const getIconForCategory = (category: string): typeof Wifi => {
     if (category.includes('Wi-Fi')) return Wifi
     if (category.includes('Ethernet')) return Network
     if (category.includes('Loopback')) return Laptop
@@ -137,15 +137,17 @@ export function InterfaceSelector({
                     <div
                       key={iface.name}
                       className={cn(
-                        "flex items-start gap-3 rounded-lg border p-3 transition-colors cursor-pointer hover:bg-accent/50",
-                        isSelected && "border-primary bg-accent"
+                        'flex items-start gap-3 rounded-lg border p-3 transition-colors cursor-pointer hover:bg-accent/50',
+                        isSelected && 'border-primary bg-accent'
                       )}
-                      onClick={() => !isCapturing && !isSwitching && onToggle(iface.name, !isSelected)}
+                      onClick={() =>
+                        !isCapturing && !isSwitching && onToggle(iface.name, !isSelected)
+                      }
                     >
                       <div
                         className={cn(
-                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary",
-                          isSelected ? "bg-primary text-primary-foreground" : "opacity-50"
+                          'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary',
+                          isSelected ? 'bg-primary text-primary-foreground' : 'opacity-50'
                         )}
                       >
                         {isSelected && <Check className="h-3 w-3" />}
@@ -154,9 +156,10 @@ export function InterfaceSelector({
                         <p className="text-sm font-medium leading-none truncate">
                           {iface.friendlyName || iface.description || iface.name}
                         </p>
-                        {(iface.friendlyName || iface.description) && iface.friendlyName !== iface.name && (
-                          <p className="text-xs text-muted-foreground truncate">{iface.name}</p>
-                        )}
+                        {(iface.friendlyName || iface.description) &&
+                          iface.friendlyName !== iface.name && (
+                            <p className="text-xs text-muted-foreground truncate">{iface.name}</p>
+                          )}
                         {iface.addresses.length > 0 && (
                           <p className="text-[10px] text-muted-foreground truncate font-mono">
                             {iface.addresses[0]}

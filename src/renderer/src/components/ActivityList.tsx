@@ -9,7 +9,7 @@ interface ActivityListProps {
   className?: string
 }
 
-export function ActivityList({ packets, className }: ActivityListProps) {
+export function ActivityList({ packets, className }: ActivityListProps): JSX.Element {
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -18,11 +18,13 @@ export function ActivityList({ packets, className }: ActivityListProps) {
     }
   }, [packets.length])
 
-  const formatTime = (timestamp: number) => new Date(timestamp).toLocaleTimeString()
+  const formatTime = (timestamp: number): string => new Date(timestamp).toLocaleTimeString()
 
-  const getSource = (p: PacketData) => p.srcIP || p.ipv4?.srcaddr || p.ipv6?.srcaddr || 'Unknown'
-  const getDest = (p: PacketData) => p.dstIP || p.ipv4?.dstaddr || p.ipv6?.dstaddr || 'Unknown'
-  const getProto = (p: PacketData) => p.protocol || '??'
+  const getSource = (p: PacketData): string =>
+    p.srcIP || p.ipv4?.srcaddr || p.ipv6?.srcaddr || 'Unknown'
+  const getDest = (p: PacketData): string =>
+    p.dstIP || p.ipv4?.dstaddr || p.ipv6?.dstaddr || 'Unknown'
+  const getProto = (p: PacketData): string => p.protocol || '??'
 
   if (packets.length === 0) {
     return (
@@ -66,9 +68,7 @@ export function ActivityList({ packets, className }: ActivityListProps) {
                 </div>
                 <div className="min-w-0 space-y-0.5">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium truncate">
-                      {packet.procName || 'System'}
-                    </span>
+                    <span className="font-medium truncate">{packet.procName || 'System'}</span>
                     <Badge variant="secondary" className="text-[10px] px-1 h-4">
                       {getProto(packet)}
                     </Badge>
