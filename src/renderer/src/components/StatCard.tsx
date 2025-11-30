@@ -10,7 +10,12 @@ interface StatCardProps {
   trend?: string
 }
 
-export function StatCard({ title, value, description, icon: Icon }: StatCardProps): React.JSX.Element {
+export function StatCard({
+  title,
+  value,
+  description,
+  icon: Icon
+}: StatCardProps): React.JSX.Element {
   return (
     <Card>
       <CardContent className="p-6">
