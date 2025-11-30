@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { useMemo } from 'react'
 import { ArrowUpDown, Activity, Clock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
@@ -8,7 +9,7 @@ interface AppInsightsProps {
   apps: AppStats[]
 }
 
-export function AppInsights({ apps }: AppInsightsProps): JSX.Element {
+export function AppInsights({ apps }: AppInsightsProps): React.JSX.Element {
   const topApps = useMemo(() => apps.slice(0, 8), [apps])
 
   const formatBytes = (bytes: number): string => {

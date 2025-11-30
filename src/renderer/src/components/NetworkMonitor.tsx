@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Activity, Database, Globe, Play, Pause, Settings2 } from 'lucide-react'
 import { Button } from './ui/button'
@@ -7,7 +8,7 @@ import { AppInsights } from './AppInsights'
 import { ActivityList } from './ActivityList'
 import { PacketData, AppStats, InterfaceOption } from '../types'
 
-export function NetworkMonitor(): JSX.Element {
+export function NetworkMonitor(): React.JSX.Element {
   // State
   const [packets, setPackets] = useState<PacketData[]>([])
   const [packetCount, setPacketCount] = useState(0)

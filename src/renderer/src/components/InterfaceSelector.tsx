@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { useMemo } from 'react'
 import { Check, Wifi, Network, Globe, Laptop } from 'lucide-react'
 import { Button } from './ui/button'
@@ -22,7 +23,7 @@ export function InterfaceSelector({
   isSwitching,
   onToggle,
   onSelectAll
-}: InterfaceSelectorProps): JSX.Element {
+}: InterfaceSelectorProps): React.JSX.Element {
   const getInterfaceCategory = (iface: InterfaceOption): string => {
     const name = iface.name.toLowerCase()
     const description = (iface.description || '').toLowerCase()

@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { useRef, useEffect } from 'react'
 import { ArrowRight, Clock, Network, Shield } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
@@ -9,7 +10,7 @@ interface ActivityListProps {
   className?: string
 }
 
-export function ActivityList({ packets, className }: ActivityListProps): JSX.Element {
+export function ActivityList({ packets, className }: ActivityListProps): React.JSX.Element {
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

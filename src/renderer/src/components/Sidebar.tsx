@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { useState } from 'react'
 import { Activity, Shield, Settings, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
@@ -9,7 +10,7 @@ interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
   onViewChange: (view: 'network' | 'system') => void
 }
 
-export function Sidebar({ className, currentView, onViewChange }: SidebarProps): JSX.Element {
+export function Sidebar({ className, currentView, onViewChange }: SidebarProps): React.JSX.Element {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   return (
