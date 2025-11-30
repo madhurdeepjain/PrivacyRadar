@@ -1,5 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
-import styles from '../App.module.css'
+import { Shield, Activity, History, Play, Pause, Lock } from 'lucide-react'
+import { Button } from './ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { Badge } from './ui/badge'
+import { StatCard } from './StatCard'
 
 interface TCCEvent {
   id: string
@@ -33,45 +37,38 @@ const serviceIcons: Record<string, string> = {
   MediaLibrary: '🎵',
   FileProviderDomain: '📁',
   ListenEvent: '🔊',
-  ScreenshotMonitoring: '📸'
+  ScreenshotMonitoring: '📸',
+  Pasteboard: '📋',
+  FullDiskAccess: '💽',
+  Desktop: '🗂️',
+  Documents: '📄',
+  Downloads: '⬇️',
+  Unknown: '🔒'
 }
 
 export function SystemMonitor(): React.JSX.Element {
   const [events, setEvents] = useState<TCCEvent[]>([])
   const [activeSessions, setActiveSessions] = useState<TCCEvent[]>([])
   const [isMonitoring, setIsMonitoring] = useState(false)
-  // const [isSupported, setIsSupported] = useState(true)
 
-  // Separate permission requests from active usage for display
   const permissionRequests = useMemo(
     () => events.filter((e) => e.eventType === 'request'),
     [events]
   )
 
   useEffect(() => {
-    // Check platform support on mount
-    // const checkSupport = async (): Promise<void> => {
-    //   const supported = await window.systemAPI.isSupported()
-    //   setIsSupported(supported)
-    // }
-    // void checkSupport()
-
-    // Listen for new events
     window.systemAPI.onEvent((event: TCCEvent) => {
-      setEvents((prev) => [event, ...prev].slice(0, 100)) // Keep last 100
+      setEvents((prev) => [event, ...prev].slice(0, 100))
     })
 
-    // Listen for session updates
     window.systemAPI.onSessionUpdate((event: TCCEvent) => {
       if (event.sessionEnd) {
-        // Session ended - remove from active, add to history
         setActiveSessions((prev) => prev.filter((s) => s.id !== event.id))
         setEvents((prev) => {
           const updated = prev.map((e) => (e.id === event.id ? event : e))
           return updated.some((e) => e.id === event.id) ? updated : [event, ...updated]
         })
       } else {
-        // Session started or updated
         setActiveSessions((prev) => {
           const exists = prev.find((s) => s.id === event.id)
           if (exists) {
@@ -90,7 +87,6 @@ export function SystemMonitor(): React.JSX.Element {
   const handleStart = async (): Promise<void> => {
     await window.systemAPI.start()
     setIsMonitoring(true)
-    // Load existing active sessions
     const sessions = await window.systemAPI.getActiveSessions()
     setActiveSessions(sessions)
   }
@@ -109,189 +105,152 @@ export function SystemMonitor(): React.JSX.Element {
   }
 
   return (
-    <div className={styles.shell}>
-      <div className={styles.mainArea}>
-        <header className={styles.mainHeader}>
-          <div>
-            <h1 className={styles.pageTitle}>System Monitor</h1>
-            <p className={styles.pageSubtitle}>Monitor OS permission requests and resource usage</p>
-            <p
-              className={styles.pageSubtitle}
-              style={{
-                marginTop: '0.5rem',
-                fontSize: '0.85em',
-                opacity: 0.8,
-                maxWidth: '600px'
-              }}
-            >
-              <strong>💡 Tip:</strong> <em>Permission requests</em> (🔔) occur when apps ask for
-              access. <em>Active usage</em> (⚡) indicates apps are currently using that resource
-              (e.g., camera recording, microphone listening).
-            </p>
-          </div>
-          <button
+    <div className="flex flex-col h-full space-y-4 p-6 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between shrink-0">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">System Monitor</h1>
+          <p className="text-muted-foreground">Track OS permission requests and resource usage</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
             onClick={isMonitoring ? handleStop : handleStart}
-            className={`${styles.captureButton} ${
-              isMonitoring ? styles.captureButtonActive : styles.captureButtonIdle
-            }`}
+            variant={isMonitoring ? 'destructive' : 'default'}
+            className="w-32"
           >
-            {isMonitoring ? 'Stop Monitoring' : 'Start Monitoring'}
-          </button>
-        </header>
+            {isMonitoring ? (
+              <>
+                <Pause className="mr-2 h-4 w-4" /> Stop
+              </>
+            ) : (
+              <>
+                <Play className="mr-2 h-4 w-4" /> Start
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
 
-        <section className={styles.summaryGrid}>
-          <article className={styles.summaryCard}>
-            <span className={styles.summaryLabel}>Permission Requests</span>
-            <span className={styles.summaryValue}>
-              {permissionRequests.length.toLocaleString()}
-            </span>
-            <span className={styles.summaryMeta}>Apps asking for access</span>
-          </article>
-          <article className={styles.summaryCard}>
-            <span className={styles.summaryLabel}>Active Usage</span>
-            <span className={styles.summaryValue}>{activeSessions.length.toLocaleString()}</span>
-            <span className={styles.summaryMeta}>Currently using resources</span>
-          </article>
-          <article className={styles.summaryCard}>
-            <span className={styles.summaryLabel}>Total Events</span>
-            <span className={styles.summaryValue}>{events.length.toLocaleString()}</span>
-            <span className={styles.summaryMeta}>All privacy events detected</span>
-          </article>
-          <article className={styles.summaryCard}>
-            <span className={styles.summaryLabel}>Monitoring Status</span>
-            <span className={styles.summaryValue}>{isMonitoring ? '🟢 Active' : '🔴 Stopped'}</span>
-            <span className={styles.summaryMeta}>
-              {isMonitoring ? 'Capturing events' : 'Not monitoring'}
-            </span>
-          </article>
-        </section>
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 shrink-0">
+        <StatCard
+          title="Active Usage"
+          value={activeSessions.length}
+          description="Apps currently using resources"
+          icon={Activity}
+        />
+        <StatCard
+          title="Permission Requests"
+          value={permissionRequests.length}
+          description="Access requests"
+          icon={Lock}
+        />
+        <StatCard
+          title="Total Events"
+          value={events.length}
+          description="All captured events"
+          icon={History}
+        />
+        <StatCard
+          title="Status"
+          value={isMonitoring ? 'Active' : 'Inactive'}
+          description="Monitoring engine"
+          icon={Shield}
+        />
+      </div>
 
+      {/* Main Content */}
+      <div className="flex-1 min-h-0 overflow-hidden grid gap-4 grid-rows-[auto_1fr]">
+        {/* Active Sessions */}
         {activeSessions.length > 0 && (
-          <div className={styles.contentGrid}>
-            <section className={styles.panel}>
-              <header className={styles.panelHeader}>
-                <div>
-                  <h2 className={styles.panelTitle}>🔴 Active Privacy Sessions</h2>
-                  <p className={styles.panelSubtitle}>Applications currently accessing resources</p>
-                </div>
-                <span className={styles.panelBadge}>
-                  {activeSessions.length.toLocaleString()} active
-                </span>
-              </header>
-              <div className={styles.packetList}>
+          <Card className="shrink-0 max-h-[300px] flex flex-col">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <Activity className="h-5 w-5" />
+                Active Privacy Sessions
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-auto no-scrollbar">
+              <div className="space-y-2">
                 {activeSessions.map((session) => (
-                  <article
+                  <div
                     key={session.id}
-                    className={`${styles.packetRow} ${styles.packetRowNew}`}
+                    className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 p-3"
                   >
-                    <div className={styles.packetHeader}>
-                      <div className={styles.packetIdentity}>
-                        <span className={styles.packetName} style={{ fontSize: '1.2em' }}>
-                          {serviceIcons[session.service] || '🔒'} {session.appName}
-                        </span>
-                        <span className={styles.packetMeta}>
-                          {session.service} • {session.bundleId}
-                        </span>
+                    <div className="flex items-center gap-3">
+                      <div className="text-2xl">{serviceIcons[session.service] || '🔒'}</div>
+                      <div>
+                        <p className="font-medium">{session.appName}</p>
+                        <p className="text-xs text-muted-foreground">{session.service}</p>
                       </div>
-                      <span className={styles.packetTimestamp}>
+                    </div>
+                    <div className="text-right">
+                      <Badge
+                        variant="outline"
+                        className="mb-1 border-destructive/50 text-destructive"
+                      >
                         Active: {formatDuration(session.duration)}
-                      </span>
+                      </Badge>
+                      <p className="text-xs text-muted-foreground font-mono">PID: {session.pid}</p>
                     </div>
-                    <div className={styles.packetChips}>
-                      <span className={`${styles.chip} ${styles.chipProtocol}`}>
-                        PID: {session.pid}
-                      </span>
-                      <span className={`${styles.chip} ${styles.chipInterface}`}>
-                        {session.authReason}
-                      </span>
-                      <span className={`${styles.chip} ${styles.chipSize}`}>
-                        {session.allowed ? '✅ Allowed' : '❌ Denied'}
-                      </span>
-                    </div>
-                  </article>
+                  </div>
                 ))}
               </div>
-            </section>
-          </div>
+            </CardContent>
+          </Card>
         )}
 
-        <div className={styles.contentGrid}>
-          <section className={styles.panel}>
-            <header className={styles.panelHeader}>
-              <div>
-                <h2 className={styles.panelTitle}>Event History</h2>
-                <p className={styles.panelSubtitle}>Recent privacy permission requests</p>
-              </div>
-              <span className={styles.panelBadge}>{events.length.toLocaleString()} events</span>
-            </header>
+        {/* Event History */}
+        <Card className="flex flex-col min-h-0">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Event History
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-auto no-scrollbar">
             {events.length === 0 ? (
-              <div className={styles.panelEmpty}>
-                <span className={styles.emptyGlyph}>🔒</span>
-                <span>
-                  {isMonitoring
-                    ? 'Listening for system permission events...'
-                    : 'Start monitoring to see system permission events'}
-                </span>
+              <div className="flex h-full items-center justify-center text-muted-foreground">
+                No events recorded yet.
               </div>
             ) : (
-              <div className={styles.packetList}>
+              <div className="divide-y">
                 {events.map((event) => (
-                  <article
+                  <div
                     key={event.id}
-                    className={`${styles.packetRow} ${!event.allowed ? styles.packetRowNew : ''}`}
+                    className="flex items-center justify-between p-3 hover:bg-accent/50 transition-colors"
                   >
-                    <div className={styles.packetHeader}>
-                      <div className={styles.packetIdentity}>
-                        <span className={styles.packetName}>
-                          {serviceIcons[event.service] || '🔒'} {event.appName}
-                        </span>
-                        <span className={styles.packetMeta}>
-                          {event.service} • {event.bundleId}
-                        </span>
-                        {event.sessionEnd && (
-                          <span className={styles.packetMeta}>
-                            Duration: {formatDuration(event.duration)}
-                          </span>
-                        )}
+                    <div className="flex items-center gap-3">
+                      <div className="text-xl">{serviceIcons[event.service] || '🔒'}</div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{event.appName}</span>
+                          <Badge
+                            variant={event.allowed ? 'outline' : 'destructive'}
+                            className="text-[10px] h-5"
+                          >
+                            {event.allowed ? 'Allowed' : 'Denied'}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate max-w-[300px]">
+                          {event.path}
+                        </div>
                       </div>
-                      <span className={styles.packetTimestamp}>
+                    </div>
+                    <div className="text-right space-y-1">
+                      <div className="text-xs font-mono text-muted-foreground">
                         {new Date(event.timestamp).toLocaleTimeString()}
-                      </span>
+                      </div>
+                      <Badge variant="secondary" className="text-[10px] h-5">
+                        {event.eventType === 'request' ? 'Request' : 'Usage'}
+                      </Badge>
                     </div>
-                    <div className={styles.packetRoute}>
-                      <span className={styles.routeEndpoint}>{event.path || 'No path'}</span>
-                    </div>
-                    <div className={styles.packetChips}>
-                      <span className={`${styles.chip} ${styles.chipProtocol}`}>
-                        PID: {event.pid}
-                      </span>
-                      <span
-                        className={`${styles.chip} ${styles.chipInterface}`}
-                        title={
-                          event.eventType === 'request'
-                            ? 'Permission request - app is asking for access'
-                            : 'Active usage - app is currently using this resource'
-                        }
-                      >
-                        {event.eventType === 'request' ? '🔔 Request' : '⚡ Active'}
-                      </span>
-                      <span className={`${styles.chip} ${styles.chipInterface}`}>
-                        {event.authReason}
-                      </span>
-                      <span
-                        className={`${styles.chip} ${
-                          event.allowed ? styles.chipSize : styles.chipProtocol
-                        }`}
-                      >
-                        {event.allowed ? '✅ Allowed' : '❌ Denied'}
-                      </span>
-                    </div>
-                  </article>
+                  </div>
                 ))}
               </div>
             )}
-          </section>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
