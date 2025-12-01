@@ -11,6 +11,16 @@ import {
   getInterfaceSelection,
   updateAnalyzerInterfaces
 } from './analyzer-runner'
+import {
+  startHardwareMonitor,
+  stopHardwareMonitor,
+  setMainWindow as setHardwareMainWindow,
+  setProcessTracker,
+  setSystemMonitor,
+  getHardwareStatus,
+  getHardwareSummary
+} from './hardware-runner'
+import { ProcessTracker } from '@main/core/network/process-tracker'
 import { registerAppLifecycleHandlers, registerProcessSignalHandlers } from './lifecycle'
 import {
   createSystemMonitor,
@@ -29,6 +39,27 @@ export async function startApp(): Promise<void> {
   electronApp.setAppUserModelId('com.privacyradar')
   registerAppLifecycleHandlers(createMainWindow)
 
+  // Register IPC handlers BEFORE creating the window to avoid race conditions
+  // The renderer may call these handlers immediately on mount
+  if (!ipcHandlersRegistered) {
+    ipcMain.handle('network:getInterfaces', async () => getInterfaceSelection())
+    ipcMain.handle('network:selectInterface', async (_event, interfaceNames: string[]) => {
+      await updateAnalyzerInterfaces(interfaceNames)
+      return getInterfaceSelection()
+    })
+    ipcMain.handle('network:startCapture', async () => {
+      await startAnalyzer()
+      return getInterfaceSelection()
+    })
+    ipcMain.handle('network:stopCapture', async () => {
+      stopAnalyzer()
+      return getInterfaceSelection()
+    })
+    ipcMain.handle('hardware:getStatus', async () => getHardwareStatus())
+    ipcMain.handle('hardware:getSummary', async () => getHardwareSummary())
+    ipcHandlersRegistered = true
+  }
+
   try {
     logger.info('Running database migrations')
     runMigrations()
@@ -46,53 +77,43 @@ export async function startApp(): Promise<void> {
 
   const mainWindow = createMainWindow()
   setMainWindow(mainWindow)
+  setHardwareMainWindow(mainWindow)
 
-  // Initialize System Monitor (platform-specific)
-  systemMonitor = createSystemMonitor(mainWindow)
+  // Initialize process tracker for hardware monitoring
+  const processTracker = new ProcessTracker()
+  setProcessTracker(processTracker)
+  await processTracker.startPolling()
 
-  if (!isSystemMonitoringSupported()) {
-    logger.warn(
-      'System monitoring is not fully supported on this platform. Some features may be limited.'
-    )
+  // Initialize system monitoring if supported (needed for unified hardware monitoring)
+  if (isSystemMonitoringSupported()) {
+    try {
+      // Pass processTracker for Linux system monitor
+      systemMonitor = createSystemMonitor(mainWindow, processTracker)
+      systemMonitor.start()
+      logger.info('System monitor started')
+      // Pass system monitor to hardware runner for unified monitoring
+      setSystemMonitor(systemMonitor)
+    } catch (error) {
+      logger.warn('Failed to start system monitor', error)
+    }
   }
 
-  if (!ipcHandlersRegistered) {
-    ipcMain.handle('network:getInterfaces', async () => getInterfaceSelection())
-    ipcMain.handle('network:selectInterface', async (_event, interfaceNames: string[]) => {
-      await updateAnalyzerInterfaces(interfaceNames)
-      return getInterfaceSelection()
-    })
-    ipcMain.handle('network:startCapture', async () => {
-      await startAnalyzer()
-      return getInterfaceSelection()
-    })
-    ipcMain.handle('network:stopCapture', async () => {
-      stopAnalyzer()
-      return getInterfaceSelection()
-    })
-
-    // System Monitor handlers
-    ipcMain.handle('system:start', () => {
-      systemMonitor?.start()
-      return { success: true }
-    })
-    ipcMain.handle('system:stop', () => {
-      systemMonitor?.stop()
-      return { success: true }
-    })
-    ipcMain.handle('system:get-active-sessions', () => {
-      return systemMonitor?.getActiveSessions() || []
-    })
-    ipcMain.handle('system:is-supported', () => {
-      return isSystemMonitoringSupported()
-    })
-
-    ipcHandlersRegistered = true
+  // Start hardware monitoring (unified across platforms)
+  // On macOS/Windows: uses system monitoring data
+  // On Linux: uses direct device checking
+  try {
+    await startHardwareMonitor()
+  } catch (error) {
+    logger.warn('Failed to start hardware monitor', error)
   }
 }
 
 export function shutdownApp(): void {
   stopAnalyzer()
-  systemMonitor?.stop()
+  stopHardwareMonitor()
+  if (systemMonitor) {
+    systemMonitor.stop()
+    systemMonitor = null
+  }
   app.quit()
 }

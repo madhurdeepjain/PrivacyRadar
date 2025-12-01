@@ -1,5 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { PacketMetadata, NetworkInterface, TCCEvent } from '../main/shared/interfaces/common'
+import type { PacketMetadata, NetworkInterface, TCCEvent, HardwareStatus, HardwareAccessSummary } from '../main/shared/interfaces/common'
 
 export interface InterfaceSelection {
   interfaces: NetworkInterface[]
@@ -16,6 +16,10 @@ export interface API {
   selectNetworkInterface: (interfaceNames: string[]) => Promise<InterfaceSelection>
   startCapture: () => Promise<InterfaceSelection>
   stopCapture: () => Promise<InterfaceSelection>
+  onHardwareStatus: (callback: (status: HardwareStatus) => void) => void
+  removeHardwareStatusListener: () => void
+  getHardwareStatus: () => Promise<HardwareStatus | null>
+  getHardwareSummary: () => Promise<HardwareAccessSummary | null>
 }
 
 export interface SystemAPI {

@@ -294,3 +294,29 @@ export interface TCCEvent {
   sessionEnd?: Date
   duration?: number // in seconds
 }
+
+// Hardware Access Monitoring
+export interface HardwareDeviceAccess {
+  device: string
+  devicePath: string
+  pid?: number
+  procName?: string
+  user?: string
+  timestamp: number
+}
+
+export interface HardwareStatus {
+  camera: HardwareDeviceAccess[]
+  microphone: HardwareDeviceAccess[]
+  screenCapture: HardwareDeviceAccess[]
+  gpu: HardwareDeviceAccess[]
+  storage: HardwareDeviceAccess[]
+  timestamp: number
+}
+
+export interface HardwareAccessSummary {
+  status: HardwareStatus
+  activeDevices: string[]
+  activeApps: string[]
+  totalActiveAccess: number
+}
