@@ -1,5 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { PacketMetadata, NetworkInterface } from '../main/shared/interfaces/common'
+import type { PacketMetadata, NetworkInterface, TCCEvent } from '../main/shared/interfaces/common'
 
 export interface InterfaceSelection {
   interfaces: NetworkInterface[]
@@ -18,11 +18,22 @@ export interface API {
   stopCapture: () => Promise<InterfaceSelection>
 }
 
-export type { PacketMetadata }
+export interface SystemAPI {
+  start: () => Promise<{ success: boolean }>
+  stop: () => Promise<{ success: boolean }>
+  getActiveSessions: () => Promise<TCCEvent[]>
+  isSupported: () => Promise<boolean>
+  onEvent: (callback: (event: TCCEvent) => void) => void
+  onSessionUpdate: (callback: (event: TCCEvent) => void) => void
+  removeAllListeners: () => void
+}
+
+export type { PacketMetadata, TCCEvent }
 
 declare global {
   interface Window {
     electron: ElectronAPI
     api: API
+    systemAPI: SystemAPI
   }
 }

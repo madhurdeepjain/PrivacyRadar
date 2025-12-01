@@ -12,8 +12,14 @@ import {
   updateAnalyzerInterfaces
 } from './analyzer-runner'
 import { registerAppLifecycleHandlers, registerProcessSignalHandlers } from './lifecycle'
+import {
+  createSystemMonitor,
+  isSystemMonitoringSupported
+} from '@core/system/system-monitor-factory'
+import type { ISystemMonitor } from '@core/system/base-system-monitor'
 
 let ipcHandlersRegistered = false
+let systemMonitor: ISystemMonitor | null = null
 
 export async function startApp(): Promise<void> {
   registerProcessSignalHandlers()
@@ -41,6 +47,15 @@ export async function startApp(): Promise<void> {
   const mainWindow = createMainWindow()
   setMainWindow(mainWindow)
 
+  // Initialize System Monitor (platform-specific)
+  systemMonitor = createSystemMonitor(mainWindow)
+
+  if (!isSystemMonitoringSupported()) {
+    logger.warn(
+      'System monitoring is not fully supported on this platform. Some features may be limited.'
+    )
+  }
+
   if (!ipcHandlersRegistered) {
     ipcMain.handle('network:getInterfaces', async () => getInterfaceSelection())
     ipcMain.handle('network:selectInterface', async (_event, interfaceNames: string[]) => {
@@ -55,11 +70,29 @@ export async function startApp(): Promise<void> {
       stopAnalyzer()
       return getInterfaceSelection()
     })
+
+    // System Monitor handlers
+    ipcMain.handle('system:start', () => {
+      systemMonitor?.start()
+      return { success: true }
+    })
+    ipcMain.handle('system:stop', () => {
+      systemMonitor?.stop()
+      return { success: true }
+    })
+    ipcMain.handle('system:get-active-sessions', () => {
+      return systemMonitor?.getActiveSessions() || []
+    })
+    ipcMain.handle('system:is-supported', () => {
+      return isSystemMonitoringSupported()
+    })
+
     ipcHandlersRegistered = true
   }
 }
 
 export function shutdownApp(): void {
   stopAnalyzer()
+  systemMonitor?.stop()
   app.quit()
 }
