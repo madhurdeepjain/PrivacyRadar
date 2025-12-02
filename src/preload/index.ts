@@ -1,7 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { API, InterfaceSelection, SystemAPI } from './preload'
-import type { PacketMetadata, TCCEvent, HardwareStatus, HardwareAccessSummary } from '../main/shared/interfaces/common'
+import type {
+  PacketMetadata,
+  TCCEvent,
+  HardwareStatus,
+  HardwareAccessSummary
+} from '../main/shared/interfaces/common'
 
 // Custom APIs for renderer
 const api: API = {

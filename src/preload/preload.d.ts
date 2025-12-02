@@ -1,5 +1,11 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { PacketMetadata, NetworkInterface, TCCEvent, HardwareStatus, HardwareAccessSummary } from '../main/shared/interfaces/common'
+import type {
+  PacketMetadata,
+  NetworkInterface,
+  TCCEvent,
+  HardwareStatus,
+  HardwareAccessSummary
+} from '../main/shared/interfaces/common'
 
 export interface InterfaceSelection {
   interfaces: NetworkInterface[]

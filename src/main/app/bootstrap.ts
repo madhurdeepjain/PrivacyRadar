@@ -57,6 +57,23 @@ export async function startApp(): Promise<void> {
     })
     ipcMain.handle('hardware:getStatus', async () => getHardwareStatus())
     ipcMain.handle('hardware:getSummary', async () => getHardwareSummary())
+
+    // System Monitor handlers
+    ipcMain.handle('system:start', () => {
+      systemMonitor?.start()
+      return { success: true }
+    })
+    ipcMain.handle('system:stop', () => {
+      systemMonitor?.stop()
+      return { success: true }
+    })
+    ipcMain.handle('system:get-active-sessions', () => {
+      return systemMonitor?.getActiveSessions() || []
+    })
+    ipcMain.handle('system:is-supported', () => {
+      return isSystemMonitoringSupported()
+    })
+
     ipcHandlersRegistered = true
   }
 
@@ -84,11 +101,16 @@ export async function startApp(): Promise<void> {
   setProcessTracker(processTracker)
   await processTracker.startPolling()
 
-  // Initialize system monitoring if supported (needed for unified hardware monitoring)
-  if (isSystemMonitoringSupported()) {
+  // Initialize System Monitor (platform-specific)
+  // Pass processTracker for Linux system monitor
+  systemMonitor = createSystemMonitor(mainWindow, processTracker)
+
+  if (!isSystemMonitoringSupported()) {
+    logger.warn(
+      'System monitoring is not fully supported on this platform. Some features may be limited.'
+    )
+  } else {
     try {
-      // Pass processTracker for Linux system monitor
-      systemMonitor = createSystemMonitor(mainWindow, processTracker)
       systemMonitor.start()
       logger.info('System monitor started')
       // Pass system monitor to hardware runner for unified monitoring
@@ -111,9 +133,7 @@ export async function startApp(): Promise<void> {
 export function shutdownApp(): void {
   stopAnalyzer()
   stopHardwareMonitor()
-  if (systemMonitor) {
-    systemMonitor.stop()
-    systemMonitor = null
-  }
+  systemMonitor?.stop()
+  systemMonitor = null
   app.quit()
 }
