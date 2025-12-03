@@ -66,7 +66,7 @@ function createLogMethod(level: 'info' | 'warn' | 'error' | 'debug') {
           pinoLogger[level](msgOrObj)
         }
       }
-    } catch (error) {
+    } catch {
       // Fallback to console if pino worker has exited or is ending
       // This prevents crashes when the logger worker is unavailable (e.g., during shutdown)
       // Only log errors and warnings to console to avoid spam during normal shutdown
