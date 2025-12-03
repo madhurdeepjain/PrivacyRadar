@@ -1,12 +1,36 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { API, InterfaceSelection, SystemAPI } from './preload'
-import type { PacketMetadata, TCCEvent } from '../main/shared/interfaces/common'
+import type {
+  ApplicationRegistry,
+  GeoLocationData,
+  GlobalRegistry,
+  PacketMetadata,
+  ProcessRegistry,
+  TCCEvent
+} from '../main/shared/interfaces/common'
 
 // Custom APIs for renderer
 const api: API = {
   onNetworkData: (callback: (data: PacketMetadata) => void) => {
-    ipcRenderer.on('network-data', (_event, data) => callback(data))
+    ipcRenderer.on('network-data', (_event, data) => {
+      if (data != undefined) callback(data)
+    })
+  },
+  onApplicationRegistryData: (callback: (data: Map<string, ApplicationRegistry>) => void) => {
+    ipcRenderer.on('application-registry-data', (_event, data) => {
+      if (data != undefined) callback(data)
+    })
+  },
+  onProcessRegistryData: (callback: (data: Map<string, ProcessRegistry>) => void) => {
+    ipcRenderer.on('process-registry-data', (_event, data) => {
+      if (data != undefined) callback(data)
+    })
+  },
+  onGlobalRegistryData: (callback: (data: Map<string, GlobalRegistry>) => void) => {
+    ipcRenderer.on('global-registry-data', (_event, data) => {
+      if (data != undefined) callback(data)
+    })
   },
   removeNetworkDataListener: () => {
     ipcRenderer.removeAllListeners('network-data')
@@ -22,6 +46,21 @@ const api: API = {
   },
   stopCapture: async (): Promise<InterfaceSelection> => {
     return ipcRenderer.invoke('network:stopCapture')
+  },
+  queryDatabase: async (sql: string): Promise<[unknown[], string]> => {
+    return ipcRenderer.invoke('network:queryDatabase', sql)
+  },
+  setValue: async (key: string, value: string): Promise<void> => {
+    return ipcRenderer.invoke('set-value', key, value)
+  },
+  getValue: async (key: string): Promise<string> => {
+    return ipcRenderer.invoke('get-value', key)
+  },
+  getGeoLocation: async (ip: string): Promise<GeoLocationData> => {
+    return ipcRenderer.invoke('network:getGeoLocation', ip)
+  },
+  getPublicIP: async (): Promise<string> => {
+    return ipcRenderer.invoke('network:getPublicIP')
   }
 }
 

@@ -15,6 +15,8 @@ import { Device, NetworkInterface, PacketMetadata } from '@shared/interfaces/com
 import { formatIPv6Address } from '@main/shared/utils/address-normalizer'
 import { getDatabase } from '@infra/db'
 import { RegistryRepository } from '@main/core/network/db-writer'
+import { getDatabasePaths } from '../infrastructure/db/utils'
+import Database from 'better-sqlite3'
 
 let analyzer: NetworkAnalyzer | null = null
 let writer: PacketWriter | null = null
@@ -50,6 +52,17 @@ function setupPeriodicTasks(
         const globalReg = networkAnalyzer.getGlobalRegistry()
         const appRegs = networkAnalyzer.getApplicationRegistries()
         const procRegs = networkAnalyzer.getProcessRegistries()
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          if (globalReg != undefined) {
+            mainWindow.webContents.send('global-registry-data', globalReg)
+          }
+          if (appRegs != undefined) {
+            mainWindow.webContents.send('application-registry-data', appRegs)
+          }
+          if (procRegs != undefined) {
+            mainWindow.webContents.send('process-registry-data', procRegs)
+          }
+        }
         await regRepo.writeRegistries(globalReg, appRegs, procRegs)
       } catch (error) {
         logger.error('Failed to write registry snapshot to database', error)
@@ -231,6 +244,27 @@ export function stopAnalyzer(): void {
   analyzer = null
   activeInterfaceNames = []
   logger.info('Network analyzer stopped')
+}
+
+export function queryDatabase(sql: string): [unknown[], string] {
+  const db = new Database(getDatabasePaths().dbPath)
+  try {
+    return [Array.from(db.prepare(sql).iterate()), '']
+  } catch (error) {
+    let message = ''
+    if (error instanceof Error) {
+      message = error.message
+    } else {
+      try {
+        message = String(error)
+      } catch {
+        message = 'Unknown error'
+      }
+    }
+    return [[], message]
+  } finally {
+    db.close()
+  }
 }
 
 export async function updateAnalyzerInterfaces(interfaceNames: string[] = []): Promise<void> {

@@ -10,12 +10,20 @@ export interface InterfaceSelection {
 }
 
 export interface API {
+  onApplicationRegistryData: (callback: (data: Map<string, ApplicationRegistry>) => void) => void
+  onProcessRegistryData: (callback: (data: Map<string, ProcessRegistry>) => void) => void
+  onGlobalRegistryData: (callback: (data: Map<string, GlobalRegistry>) => void) => void
   onNetworkData: (callback: (data: PacketMetadata) => void) => void
   removeNetworkDataListener: () => void
   getNetworkInterfaces: () => Promise<InterfaceSelection>
   selectNetworkInterface: (interfaceNames: string[]) => Promise<InterfaceSelection>
   startCapture: () => Promise<InterfaceSelection>
   stopCapture: () => Promise<InterfaceSelection>
+  queryDatabase: (sql: string) => Promise<[unknown[], string]>
+  setValue: (key: string, value: string) => Promise<void>
+  getValue: (key: string) => Promise<string>
+  getGeoLocation: (ip: string) => Promise<GeoLocationData>
+  getPublicIP: () => Promise<string>
 }
 
 export interface SystemAPI {

@@ -4,12 +4,16 @@ import { logger } from '@infra/logging'
 import { runMigrations } from '@infra/db/migrate'
 import { getDatabase } from '@infra/db'
 import { createMainWindow } from './window-manager'
+import { GeoLocationService } from '../core/network/geo-location'
+import fs from 'fs'
+import path from 'path'
 import {
   startAnalyzer,
   stopAnalyzer,
   setMainWindow,
   getInterfaceSelection,
-  updateAnalyzerInterfaces
+  updateAnalyzerInterfaces,
+  queryDatabase
 } from './analyzer-runner'
 import { registerAppLifecycleHandlers, registerProcessSignalHandlers } from './lifecycle'
 import {
@@ -57,6 +61,15 @@ export async function startApp(): Promise<void> {
   }
 
   if (!ipcHandlersRegistered) {
+    const userDataPath = app.getPath('userData')
+    const filePath = path.join(userDataPath, 'values.json')
+    const geoLocationService = new GeoLocationService()
+    ipcMain.handle('network:getGeoLocation', async (_event, ip: string) => {
+      return await geoLocationService.lookup(ip)
+    })
+    ipcMain.handle('network:getPublicIP', async () => {
+      return await geoLocationService.getPublicIP()
+    })
     ipcMain.handle('network:getInterfaces', async () => getInterfaceSelection())
     ipcMain.handle('network:selectInterface', async (_event, interfaceNames: string[]) => {
       await updateAnalyzerInterfaces(interfaceNames)
@@ -69,6 +82,43 @@ export async function startApp(): Promise<void> {
     ipcMain.handle('network:stopCapture', async () => {
       stopAnalyzer()
       return getInterfaceSelection()
+    })
+    ipcMain.handle('network:queryDatabase', async (_event, sql: string) => {
+      return queryDatabase(sql)
+    })
+    ipcMain.handle('set-value', (_event, key: string, value: string) => {
+      if (fs.existsSync(filePath)) {
+        fs.readFile(filePath, 'utf8', (err, data) => {
+          if (err) console.error('Error loading settings:', err)
+          else {
+            const values = JSON.parse(data)
+            values[key] = value
+            fs.writeFile(filePath, JSON.stringify(values), (err) => {
+              if (err) console.error('Error saving settings:', err)
+            })
+          }
+        })
+      } else {
+        const values = {}
+        values[key] = value
+        fs.writeFile(filePath, JSON.stringify(values), (err) => {
+          if (err) console.error('Error saving settings:', err)
+        })
+      }
+    })
+
+    ipcMain.handle('get-value', async (_event, key: string) => {
+      try {
+        if (!fs.existsSync(filePath)) {
+          return null
+        }
+        const data = await fs.promises.readFile(filePath, 'utf8')
+        const values = JSON.parse(data)
+        return values[key]
+      } catch (err) {
+        console.error('Error loading settings:', err)
+        return null
+      }
     })
 
     // System Monitor handlers
