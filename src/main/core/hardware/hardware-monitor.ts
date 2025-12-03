@@ -45,7 +45,7 @@ export class HardwareMonitor {
     logger.info('Hardware monitor started')
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     if (!this.pollingTimer) {
       return
     }
@@ -58,7 +58,8 @@ export class HardwareMonitor {
     const maxWait = 1000
     const startWait = Date.now()
     while (this.refreshInProgress && Date.now() - startWait < maxWait) {
-      // Wait for refresh to complete
+      // Use async wait instead of busy-wait to avoid blocking event loop
+      await new Promise((resolve) => setTimeout(resolve, 10))
     }
 
     this.currentStatus = null

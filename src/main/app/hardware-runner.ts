@@ -11,8 +11,12 @@ let systemMonitor: ISystemMonitor | null = null
 let mainWindow: BrowserWindow | null = null
 
 function sendHardwareStatusToFrontend(status: HardwareStatus): void {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('hardware-status', status)
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('hardware-status', status)
+    }
+  } catch (error) {
+    logger.debug('Failed to send hardware status to frontend:', error)
   }
 }
 
@@ -59,13 +63,13 @@ export async function startHardwareMonitor(): Promise<void> {
   }
 }
 
-export function stopHardwareMonitor(): void {
+export async function stopHardwareMonitor(): Promise<void> {
   if (!hardwareMonitor) {
     return
   }
 
   try {
-    hardwareMonitor.stop()
+    await hardwareMonitor.stop()
     hardwareMonitor = null
     logger.info('Hardware monitor stopped')
   } catch (error) {

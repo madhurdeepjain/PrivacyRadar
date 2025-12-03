@@ -437,22 +437,28 @@ export class HardwareTracker {
   }
 
   private async checkDirectoryAccess(dir: string): Promise<HardwareDeviceAccess[] | null> {
-    if (!/^\/[\w/\-.]+$/.test(dir)) {
+    // More restrictive validation
+    if (!/^\/[\w/\-.]+$/.test(dir) || dir.includes('..') || /[;&|`$(){}[\]]/.test(dir)) {
       logger.debug(`Invalid directory path format: ${dir}`)
+      return null
+    }
+
+    // Ensure it's an absolute path
+    if (!dir.startsWith('/')) {
+      logger.debug(`Directory path must be absolute: ${dir}`)
       return null
     }
 
     if (this.hasCommand('lsof')) {
       try {
-        const { stdout } = await execAsync(
-          `lsof +D "${dir.replace(/"/g, '\\"')}" 2>/dev/null | tail -n +2 | head -10`,
-          {
-            timeout: 2000,
-            maxBuffer: 1024 * 1024,
-            shell: true as unknown as string
-          }
-        )
+        // Remove shell pipe and filter in JavaScript to avoid type issues
+        // No need for shell: true since we removed the pipe
+        const { stdout } = await execAsync(`lsof +D "${dir.replace(/"/g, '\\"')}" 2>/dev/null`, {
+          timeout: 2000,
+          maxBuffer: 1024 * 1024
+        })
 
+        // Filter in JavaScript instead of using shell pipes
         const lines = stdout.trim().split('\n').slice(1).slice(0, 10)
         if (lines.length > 0 && lines[0].trim() !== '') {
           const accesses: HardwareDeviceAccess[] = []
@@ -650,54 +656,71 @@ export class HardwareTracker {
   private async findPipeWireProcesses(): Promise<DeviceAccessResult[]> {
     const processes = new Map<number, DeviceAccessResult>()
 
-    if (this.hasCommand('lsof')) {
+    // Programmatically enumerate pipewire files instead of shell wildcards
+    const runtimeDir = process.env.XDG_RUNTIME_DIR || '/tmp'
+    const dirs = [runtimeDir, '/tmp']
+    const pipewireFiles: string[] = []
+
+    for (const dir of dirs) {
       try {
-        const { stdout } = await execAsync('lsof /tmp/pipewire-* 2>/dev/null', {
-          timeout: 2000,
-          maxBuffer: 1024 * 1024,
-          shell: true as unknown as string
-        })
-
-        const lines = stdout.trim().split('\n').slice(1)
-
-        for (const line of lines) {
-          const parts = line.trim().split(/\s+/)
-          if (parts.length < 2) continue
-
-          const pidStr = parts[1]
-          const pid = Number.parseInt(pidStr, 10)
-          if (Number.isNaN(pid) || pid <= 0) continue
-
-          if (!processes.has(pid)) {
-            const procDetails = this.processTracker.getProcDetails(pid)
-            processes.set(pid, {
-              devicePath: 'PipeWire',
-              pid,
-              procName: procDetails?.name || parts[0],
-              timestamp: Date.now()
-            })
-          }
+        if (existsSync(dir)) {
+          const entries = readdirSync(dir)
+          const matches = entries.filter((e) => e.startsWith('pipewire-')).map((e) => `${dir}/${e}`)
+          pipewireFiles.push(...matches)
         }
       } catch {
-        // Fall through to /proc fallback
+        // Ignore errors
       }
     }
 
-    const runtimeDir = process.env.XDG_RUNTIME_DIR || '/tmp'
-    const pipewirePaths = [`${runtimeDir}/pipewire-*`, '/tmp/pipewire-*']
+    // Run lsof on each file individually
+    for (const filePath of pipewireFiles) {
+      if (this.hasCommand('lsof')) {
+        try {
+          const { stdout } = await execAsync(
+            `lsof "${filePath.replace(/"/g, '\\"')}" 2>/dev/null`,
+            {
+              timeout: 2000,
+              maxBuffer: 1024 * 1024
+            }
+          )
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    for (const _pattern of pipewirePaths) {
-      const procAccess = await this.checkWaylandSocketsViaProc()
-      for (const acc of procAccess) {
-        if (!processes.has(acc.pid || 0)) {
-          processes.set(acc.pid || 0, {
-            devicePath: 'PipeWire',
-            pid: acc.pid,
-            procName: acc.procName,
-            timestamp: acc.timestamp
-          })
+          const lines = stdout.trim().split('\n').slice(1)
+
+          for (const line of lines) {
+            const parts = line.trim().split(/\s+/)
+            if (parts.length < 2) continue
+
+            const pidStr = parts[1]
+            const pid = Number.parseInt(pidStr, 10)
+            if (Number.isNaN(pid) || pid <= 0) continue
+
+            if (!processes.has(pid)) {
+              const procDetails = this.processTracker.getProcDetails(pid)
+              processes.set(pid, {
+                devicePath: 'PipeWire',
+                pid,
+                procName: procDetails?.name || parts[0],
+                timestamp: Date.now()
+              })
+            }
+          }
+        } catch {
+          // Ignore errors for individual files
         }
+      }
+    }
+
+    // Use /proc fallback (only once, not in a loop)
+    const procAccess = await this.checkWaylandSocketsViaProc()
+    for (const acc of procAccess) {
+      if (acc.pid && !processes.has(acc.pid)) {
+        processes.set(acc.pid, {
+          devicePath: 'PipeWire',
+          pid: acc.pid,
+          procName: acc.procName,
+          timestamp: acc.timestamp
+        })
       }
     }
 
@@ -707,68 +730,87 @@ export class HardwareTracker {
   private async checkWaylandCapture(): Promise<DeviceAccessResult[]> {
     const accesses: DeviceAccessResult[] = []
 
-    try {
-      const waylandPaths = [
-        '/tmp/wayland-*',
-        `${process.env.XDG_RUNTIME_DIR || '/tmp'}/wayland-*`,
-        `${process.env.XDG_RUNTIME_DIR || '/tmp'}/pipewire-*`
-      ]
+    // Programmatically enumerate wayland files
+    const runtimeDir = process.env.XDG_RUNTIME_DIR || '/tmp'
+    const dirs = [runtimeDir, '/tmp']
+    const waylandFiles: string[] = []
 
-      for (const pattern of waylandPaths) {
-        if (this.hasCommand('lsof')) {
-          try {
-            const { stdout } = await execAsync(`lsof ${pattern} 2>/dev/null`, {
+    for (const dir of dirs) {
+      try {
+        if (existsSync(dir)) {
+          const entries = readdirSync(dir)
+          const matches = entries
+            .filter((e) => e.startsWith('wayland-') || e.startsWith('pipewire-'))
+            .map((e) => `${dir}/${e}`)
+          waylandFiles.push(...matches)
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
+
+    // Run lsof on each file individually
+    const seenPids = new Set<number>()
+
+    for (const filePath of waylandFiles) {
+      if (this.hasCommand('lsof')) {
+        try {
+          const { stdout } = await execAsync(
+            `lsof "${filePath.replace(/"/g, '\\"')}" 2>/dev/null`,
+            {
               timeout: 2000,
-              maxBuffer: 1024 * 1024,
-              shell: true as unknown as string
+              maxBuffer: 1024 * 1024
+            }
+          )
+
+          const lines = stdout
+            .trim()
+            .split('\n')
+            .filter((line) => {
+              const lower = line.toLowerCase()
+              return (
+                lower.includes('screencopy') ||
+                lower.includes('pipewire') ||
+                lower.includes('wayland')
+              )
             })
 
-            const lines = stdout
-              .trim()
-              .split('\n')
-              .filter((line) => {
-                const lower = line.toLowerCase()
-                return (
-                  lower.includes('screencopy') ||
-                  lower.includes('pipewire') ||
-                  lower.includes('wayland')
-                )
+          for (const line of lines) {
+            const parts = line.trim().split(/\s+/)
+            if (parts.length < 2) continue
+
+            const pidStr = parts[1]
+            const pid = Number.parseInt(pidStr, 10)
+
+            if (!Number.isNaN(pid) && pid > 0 && !seenPids.has(pid)) {
+              seenPids.add(pid)
+              const procDetails = this.processTracker.getProcDetails(pid)
+              accesses.push({
+                devicePath: 'Wayland',
+                pid,
+                procName: procDetails?.name || parts[0],
+                timestamp: Date.now()
               })
-
-            const seenPids = new Set<number>()
-
-            for (const line of lines) {
-              const parts = line.trim().split(/\s+/)
-              if (parts.length < 2) continue
-
-              const pidStr = parts[1]
-              const pid = Number.parseInt(pidStr, 10)
-
-              if (!Number.isNaN(pid) && pid > 0 && !seenPids.has(pid)) {
-                seenPids.add(pid)
-                const procDetails = this.processTracker.getProcDetails(pid)
-                accesses.push({
-                  devicePath: 'Wayland',
-                  pid,
-                  procName: procDetails?.name || parts[0],
-                  timestamp: Date.now()
-                })
-              }
             }
-          } catch {
-            // Ignore
           }
+        } catch {
+          // Ignore errors for individual files
         }
-
-        const waylandSockets = await this.checkWaylandSocketsViaProc()
-        accesses.push(...waylandSockets)
       }
-
-      const dbusAccess = await this.checkDbusScreenCapture()
-      accesses.push(...dbusAccess)
-    } catch {
-      // Ignore
     }
+
+    // Also check via /proc fallback
+    const waylandSockets = await this.checkWaylandSocketsViaProc()
+    for (const acc of waylandSockets) {
+      if (acc.pid && !seenPids.has(acc.pid)) {
+        seenPids.add(acc.pid)
+        accesses.push(acc)
+      }
+    }
+
+    // Check D-Bus screen capture
+    const dbusAccess = await this.checkDbusScreenCapture()
+    accesses.push(...dbusAccess)
 
     return accesses
   }
@@ -951,8 +993,7 @@ export class HardwareTracker {
       /grim/i,
       /wf-recorder/i,
       /vokoscreen/i,
-      /peek/i,
-      /kazam/i
+      /peek/i
     ]
 
     const deSpecificPatterns: Record<string, RegExp[]> = {
@@ -1042,11 +1083,25 @@ export class HardwareTracker {
     try {
       const sndDir = '/dev/snd'
       if (existsSync(sndDir)) {
-        const output = execSync(`find ${sndDir} -type c 2>/dev/null`, {
-          encoding: 'utf8',
-          maxBuffer: 1024 * 1024
-        })
-        devices.push(...output.trim().split('\n').filter(Boolean))
+        // Use readdirSync instead of shell find command to avoid shell injection risks
+        const entries = readdirSync(sndDir, { withFileTypes: true })
+        for (const entry of entries) {
+          if (entry.isCharacterDevice()) {
+            devices.push(`${sndDir}/${entry.name}`)
+          } else if (entry.isDirectory()) {
+            // Recursively check subdirectories
+            try {
+              const subEntries = readdirSync(`${sndDir}/${entry.name}`, { withFileTypes: true })
+              for (const subEntry of subEntries) {
+                if (subEntry.isCharacterDevice()) {
+                  devices.push(`${sndDir}/${entry.name}/${subEntry.name}`)
+                }
+              }
+            } catch {
+              // Ignore subdirectory errors
+            }
+          }
+        }
       }
     } catch {
       // Ignore errors
@@ -1059,11 +1114,13 @@ export class HardwareTracker {
     try {
       const driDir = '/dev/dri'
       if (existsSync(driDir)) {
-        const output = execSync(`find ${driDir} -type c 2>/dev/null`, {
-          encoding: 'utf8',
-          maxBuffer: 1024 * 1024
-        })
-        devices.push(...output.trim().split('\n').filter(Boolean))
+        // Use readdirSync instead of shell find command to avoid shell injection risks
+        const entries = readdirSync(driDir, { withFileTypes: true })
+        for (const entry of entries) {
+          if (entry.isCharacterDevice()) {
+            devices.push(`${driDir}/${entry.name}`)
+          }
+        }
       }
     } catch {
       // Ignore errors

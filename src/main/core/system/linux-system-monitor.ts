@@ -1,4 +1,4 @@
-import { execSync, exec } from 'child_process'
+import { exec, execSync } from 'child_process'
 import { promisify } from 'util'
 import { existsSync, readdirSync, readlinkSync } from 'fs'
 import { BrowserWindow } from 'electron'
@@ -171,6 +171,12 @@ interface ActiveSession {
  * Requirements: Modern Linux with lsof, PulseAudio/PipeWire support
  */
 export class LinuxSystemMonitor extends BaseSystemMonitor {
+  // Polling and timeout constants
+  private static readonly POLL_INTERVAL_MS = 2000 // Check hardware usage every 2 seconds
+  private static readonly SESSION_TIMEOUT_CHECK_MS = 5000 // Check session timeouts every 5 seconds
+  private static readonly SESSION_TIMEOUT_MS = 10000 // Session timeout after 10 seconds of inactivity
+  private static readonly LSOF_TIMEOUT_MS = 2000 // lsof command timeout
+
   private processTracker: ProcessTracker | null = null
   private activeSessions: Map<string, ActiveSession> = new Map()
   private pollInterval: NodeJS.Timeout | null = null
@@ -206,11 +212,11 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
 
     this.pollInterval = setInterval(() => {
       void this.scanCurrentUsage()
-    }, 2000)
+    }, LinuxSystemMonitor.POLL_INTERVAL_MS)
 
     this.sessionCheckInterval = setInterval(() => {
       this.checkSessionTimeouts()
-    }, 5000)
+    }, LinuxSystemMonitor.SESSION_TIMEOUT_CHECK_MS)
 
     logger.info('Linux System Monitor started')
   }
@@ -454,7 +460,7 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
 
   private checkSessionTimeouts(): void {
     const now = Date.now()
-    const timeout = 10000
+    const timeout = LinuxSystemMonitor.SESSION_TIMEOUT_MS
 
     for (const [key, session] of this.activeSessions.entries()) {
       const timeSinceLastSeen = now - session.lastSeen.getTime()
@@ -486,8 +492,25 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
     try {
       const sndDir = '/dev/snd'
       if (existsSync(sndDir)) {
-        const output = execSync(`find ${sndDir} -type c 2>/dev/null`, { encoding: 'utf8' })
-        devices.push(...output.trim().split('\n').filter(Boolean))
+        // Use readdirSync instead of shell find command to avoid shell injection risks
+        const entries = readdirSync(sndDir, { withFileTypes: true })
+        for (const entry of entries) {
+          if (entry.isCharacterDevice()) {
+            devices.push(`${sndDir}/${entry.name}`)
+          } else if (entry.isDirectory()) {
+            // Recursively check subdirectories
+            try {
+              const subEntries = readdirSync(`${sndDir}/${entry.name}`, { withFileTypes: true })
+              for (const subEntry of subEntries) {
+                if (subEntry.isCharacterDevice()) {
+                  devices.push(`${sndDir}/${entry.name}/${subEntry.name}`)
+                }
+              }
+            } catch {
+              // Ignore subdirectory errors
+            }
+          }
+        }
       }
     } catch {
       // Ignore errors
@@ -500,8 +523,13 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
     try {
       const driDir = '/dev/dri'
       if (existsSync(driDir)) {
-        const output = execSync(`find ${driDir} -type c 2>/dev/null`, { encoding: 'utf8' })
-        devices.push(...output.trim().split('\n').filter(Boolean))
+        // Use readdirSync instead of shell find command to avoid shell injection risks
+        const entries = readdirSync(driDir, { withFileTypes: true })
+        for (const entry of entries) {
+          if (entry.isCharacterDevice()) {
+            devices.push(`${driDir}/${entry.name}`)
+          }
+        }
       }
     } catch {
       // Ignore errors
@@ -523,7 +551,14 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
       return null
     }
 
-    if (!/^\/dev\/[\w/\-.]+$/.test(devicePath)) {
+    // More restrictive validation - only allow device paths
+    if (!/^\/dev\/[\w/\-.]+$/.test(devicePath) || devicePath.includes('..')) {
+      logger.debug(`Invalid device path format: ${devicePath}`)
+      return null
+    }
+
+    // Additional check: ensure path is absolute and doesn't contain shell metacharacters
+    if (!devicePath.startsWith('/dev/') || /[;&|`$(){}[\]]/.test(devicePath)) {
       logger.debug(`Invalid device path format: ${devicePath}`)
       return null
     }
@@ -533,7 +568,7 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
         const { stdout } = await execAsync(
           `lsof "${devicePath.replace(/"/g, '\\"')}" 2>/dev/null`,
           {
-            timeout: 2000,
+            timeout: LinuxSystemMonitor.LSOF_TIMEOUT_MS,
             maxBuffer: 1024 * 1024
           }
         )
@@ -755,69 +790,83 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
       return accesses
     }
 
-    if (this.hasCommand('lsof')) {
-      try {
-        const { stdout } = await execAsync('lsof /tmp/wayland-* 2>/dev/null', {
-          timeout: 2000,
-          maxBuffer: 1024 * 1024,
-          shell: true as unknown as string
-        })
-
-        const lines = stdout
-          .trim()
-          .split('\n')
-          .filter((line) => {
-            const lower = line.toLowerCase()
-            return lower.includes('screencopy') || lower.includes('pipewire')
-          })
-
-        const seenPids = new Set<number>()
-
-        for (const line of lines) {
-          const parts = line.trim().split(/\s+/)
-          if (parts.length < 2) continue
-
-          const procName = parts[0]
-          const pidStr = parts[1]
-          const pid = Number.parseInt(pidStr, 10)
-
-          if (!Number.isNaN(pid) && pid > 0 && !seenPids.has(pid)) {
-            seenPids.add(pid)
-            const procDetails = this.processTracker.getProcDetails(pid)
-            accesses.push({
-              devicePath: 'Wayland',
-              pid,
-              procName: procDetails?.name || procName,
-              timestamp: Date.now()
-            })
-          }
-        }
-      } catch {
-        // Fall through to /proc fallback
-      }
-    }
-
+    // Programmatically enumerate wayland/pipewire files instead of shell wildcards
     const runtimeDir = process.env.XDG_RUNTIME_DIR || '/tmp'
     const dirs = [runtimeDir, '/tmp']
+    const waylandFiles: string[] = []
 
     for (const dir of dirs) {
       try {
         if (existsSync(dir)) {
           const entries = readdirSync(dir)
-          const waylandFiles = entries.filter(
-            (e) => e.startsWith('wayland-') || e.startsWith('pipewire-')
-          )
-
-          for (const file of waylandFiles) {
-            const filePath = `${dir}/${file}`
-            const procAccess = await this.checkDeviceAccessViaProc(filePath)
-            if (procAccess) {
-              accesses.push(...procAccess)
-            }
-          }
+          const matches = entries
+            .filter((e) => e.startsWith('wayland-') || e.startsWith('pipewire-'))
+            .map((e) => `${dir}/${e}`)
+          waylandFiles.push(...matches)
         }
       } catch {
-        // Ignore
+        // Ignore errors reading directories
+      }
+    }
+
+    // Run lsof on each file individually, aggregate results
+    const seenPids = new Set<number>()
+
+    for (const filePath of waylandFiles) {
+      if (this.hasCommand('lsof')) {
+        try {
+          // Use shell: false and pass file path directly (no wildcards)
+          const { stdout } = await execAsync(
+            `lsof "${filePath.replace(/"/g, '\\"')}" 2>/dev/null`,
+            {
+              timeout: LinuxSystemMonitor.LSOF_TIMEOUT_MS,
+              maxBuffer: 1024 * 1024
+            }
+          )
+
+          const lines = stdout
+            .trim()
+            .split('\n')
+            .filter((line) => {
+              const lower = line.toLowerCase()
+              return lower.includes('screencopy') || lower.includes('pipewire')
+            })
+
+          for (const line of lines) {
+            const parts = line.trim().split(/\s+/)
+            if (parts.length < 2) continue
+
+            const procName = parts[0]
+            const pidStr = parts[1]
+            const pid = Number.parseInt(pidStr, 10)
+
+            if (!Number.isNaN(pid) && pid > 0 && !seenPids.has(pid)) {
+              seenPids.add(pid)
+              const procDetails = this.processTracker.getProcDetails(pid)
+              accesses.push({
+                devicePath: 'Wayland',
+                pid,
+                procName: procDetails?.name || procName,
+                timestamp: Date.now()
+              })
+            }
+          }
+        } catch {
+          // Ignore errors for individual files
+        }
+      }
+    }
+
+    // Also check via /proc fallback
+    for (const filePath of waylandFiles) {
+      const procAccess = await this.checkDeviceAccessViaProc(filePath)
+      if (procAccess) {
+        for (const acc of procAccess) {
+          if (acc.pid && !seenPids.has(acc.pid)) {
+            seenPids.add(acc.pid)
+            accesses.push(acc)
+          }
+        }
       }
     }
 

@@ -99,7 +99,15 @@ export async function startApp(): Promise<void> {
   // Initialize process tracker for hardware monitoring
   const processTracker = new ProcessTracker()
   setProcessTracker(processTracker)
-  await processTracker.startPolling()
+  try {
+    await processTracker.startPolling()
+  } catch (error) {
+    logger.error('Failed to start process tracker:', error)
+    // Abort further initialization if process tracker is critical
+    throw new Error(
+      'Failed to start process tracker: ' + (error instanceof Error ? error.message : String(error))
+    )
+  }
 
   // Initialize System Monitor (platform-specific)
   // Pass processTracker for Linux system monitor
@@ -126,13 +134,19 @@ export async function startApp(): Promise<void> {
   try {
     await startHardwareMonitor()
   } catch (error) {
-    logger.warn('Failed to start hardware monitor', error)
+    logger.error('Failed to start hardware monitor:', error)
+    throw new Error(
+      'Failed to start hardware monitor: ' +
+        (error instanceof Error ? error.message : String(error))
+    )
   }
 }
 
-export function shutdownApp(): void {
+export async function shutdownApp(): Promise<void> {
+  // Shutdown logger BEFORE cleanup code runs to prevent "worker is ending" errors
+  logger.shutdown()
   stopAnalyzer()
-  stopHardwareMonitor()
+  await stopHardwareMonitor()
   systemMonitor?.stop()
   systemMonitor = null
   app.quit()
