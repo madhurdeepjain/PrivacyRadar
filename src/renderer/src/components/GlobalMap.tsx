@@ -10,11 +10,9 @@ function GlobalMap(): React.JSX.Element {
   const [registries, setRegistries] = useState<Map<string, ApplicationRegistry>>(new Map())
   const [location, setLocation] = useState({ lat: 0, lon: 0 })
   // const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
-  const projection = d3
-    .geoMercator()
-    .center([-40, 30])
-    // .scale(dimensions.width / 2 / Math.PI)
-    // .translate([dimensions.width / 2, dimensions.height / 2])
+  const projection = d3.geoMercator().center([-40, 30])
+  // .scale(dimensions.width / 2 / Math.PI)
+  // .translate([dimensions.width / 2, dimensions.height / 2])
   const geoPathGenerator = d3.geoPath().projection(projection)
   const backgroundMapSvgElements = data.features
     .filter((shape) => shape.id !== 'ATA')
