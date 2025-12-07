@@ -56,12 +56,6 @@ export function SystemMonitor(): React.JSX.Element {
     [events]
   )
 
-  // Filter out GPU from active sessions - only show privacy-sensitive resources
-  const privacySensitiveSessions = useMemo(
-    () => activeSessions.filter((s) => s.service !== 'GPU'),
-    [activeSessions]
-  )
-
   useEffect(() => {
     window.systemAPI.onEvent((event: TCCEvent) => {
       setEvents((prev) => [event, ...prev].slice(0, 100))
@@ -141,8 +135,8 @@ export function SystemMonitor(): React.JSX.Element {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 shrink-0">
         <StatCard
           title="Active Usage"
-          value={privacySensitiveSessions.length}
-          description="Apps using privacy-sensitive resources"
+          value={activeSessions.length}
+          description="Apps currently using resources"
           icon={Activity}
         />
         <StatCard
@@ -168,7 +162,7 @@ export function SystemMonitor(): React.JSX.Element {
       {/* Main Content */}
       <div className="flex-1 min-h-0 overflow-hidden grid gap-4 grid-rows-[auto_1fr]">
         {/* Active Sessions */}
-        {privacySensitiveSessions.length > 0 && (
+        {activeSessions.length > 0 && (
           <Card className="shrink-0 max-h-[300px] flex flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-destructive">
@@ -178,7 +172,7 @@ export function SystemMonitor(): React.JSX.Element {
             </CardHeader>
             <CardContent className="flex-1 overflow-auto no-scrollbar">
               <div className="space-y-2">
-                {privacySensitiveSessions.map((session) => (
+                {activeSessions.map((session) => (
                   <div
                     key={session.id}
                     className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 p-3"

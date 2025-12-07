@@ -6,9 +6,6 @@ import { isDevelopment } from '@shared/utils/environment'
 // Create logger with appropriate configuration
 const isDevMode = isDevelopment()
 
-// Flag to track if logger is shutting down (worker thread ending)
-let isLoggerShuttingDown = false
-
 const pinoLogger = pino({
   level: isDevMode ? 'debug' : 'info',
   transport: isDevMode
@@ -36,60 +33,27 @@ const pinoLogger = pino({
 // Supports both: logger.info(msg, obj) and logger.info(obj, msg)
 function createLogMethod(level: 'info' | 'warn' | 'error' | 'debug') {
   return (msgOrObj: string | object, objOrMsg?: object | string | unknown) => {
-    // Don't log if logger is shutting down (worker thread is ending)
-    if (isLoggerShuttingDown) {
-      // Only allow critical errors during shutdown
-      if (level === 'error') {
-        console.error(msgOrObj, objOrMsg)
-      }
-      return
-    }
-
-    try {
-      if (typeof msgOrObj === 'string') {
-        // Pattern: logger.info('message', { data }) or logger.info('message', error)
-        if (objOrMsg !== undefined) {
-          if (typeof objOrMsg === 'object') {
-            pinoLogger[level](objOrMsg, msgOrObj)
-          } else {
-            // Handle error or other types by wrapping in object
-            pinoLogger[level]({ data: objOrMsg }, msgOrObj)
-          }
+    if (typeof msgOrObj === 'string') {
+      // Pattern: logger.info('message', { data }) or logger.info('message', error)
+      if (objOrMsg !== undefined) {
+        if (typeof objOrMsg === 'object') {
+          pinoLogger[level](objOrMsg, msgOrObj)
         } else {
-          pinoLogger[level](msgOrObj)
+          // Handle error or other types by wrapping in object
+          pinoLogger[level]({ data: objOrMsg }, msgOrObj)
         }
       } else {
-        // Pattern: logger.info({ data }, 'message')
-        if (objOrMsg && typeof objOrMsg === 'string') {
-          pinoLogger[level](msgOrObj, objOrMsg)
-        } else {
-          pinoLogger[level](msgOrObj)
-        }
+        pinoLogger[level](msgOrObj)
       }
-    } catch {
-      // Fallback to console if pino worker has exited or is ending
-      // This prevents crashes when the logger worker is unavailable (e.g., during shutdown)
-      // Only log errors and warnings to console to avoid spam during normal shutdown
-      if (level === 'error') {
-        console.error(msgOrObj, objOrMsg)
-      } else if (level === 'warn') {
-        console.warn(msgOrObj, objOrMsg)
+    } else {
+      // Pattern: logger.info({ data }, 'message')
+      if (objOrMsg && typeof objOrMsg === 'string') {
+        pinoLogger[level](msgOrObj, objOrMsg)
+      } else {
+        pinoLogger[level](msgOrObj)
       }
-      // Silently ignore info/debug logs if logger worker is unavailable
-      // This is expected during app shutdown
     }
   }
-}
-
-/**
- * Gracefully shutdown the logger.
- * Call this before app cleanup to prevent "worker is ending" errors.
- * After calling this, all logging (except errors) will be silently ignored.
- */
-export function shutdownLogger(): void {
-  isLoggerShuttingDown = true
-  // Give the worker a moment to flush any pending logs
-  // The worker will be terminated by Node.js during process exit
 }
 
 // Export wrapped logger that supports flexible argument patterns
@@ -99,9 +63,7 @@ export const logger = {
   error: createLogMethod('error'),
   debug: createLogMethod('debug'),
   // Expose the underlying pino instance for advanced usage
-  child: pinoLogger.child.bind(pinoLogger),
-  // Expose shutdown method
-  shutdown: shutdownLogger
+  child: pinoLogger.child.bind(pinoLogger)
 }
 
 export type Logger = typeof logger

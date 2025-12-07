@@ -46,9 +46,11 @@ describe('App dashboard', () => {
       await Promise.resolve()
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: /network monitor/i })).toBeInTheDocument()
-    expect(screen.getByText(/waiting for network activity/i)).toBeInTheDocument()
-    expect(screen.getByText('Packets')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 1, name: /network operations/i })
+    ).toBeInTheDocument()
+    expect(screen.getByText(/listening for network activity/i)).toBeInTheDocument()
+    expect(screen.getByText('Packets captured')).toBeInTheDocument()
   })
 
   it('updates metrics when new packet data streams in', async () => {
@@ -79,10 +81,18 @@ describe('App dashboard', () => {
       await Promise.resolve()
     })
 
-    // After packet arrives, should see the app name (appears in both ActivityList and AppInsights)
+    expect(screen.getByText(/streaming now/i)).toBeInTheDocument()
     const appMentions = screen.getAllByText(/test app/i)
-    expect(appMentions.length).toBeGreaterThanOrEqual(1)
-    // Should see TCP protocol badge
-    expect(screen.getByText('TCP')).toBeInTheDocument()
+    expect(appMentions.length).toBeGreaterThanOrEqual(2)
+    appMentions.forEach((element) => {
+      expect(element).toBeVisible()
+    })
+
+    const processIds = screen.getAllByText(/pid\s+4242/i)
+    expect(processIds.length).toBeGreaterThanOrEqual(2)
+    processIds.forEach((element) => {
+      expect(element).toBeVisible()
+    })
+    expect(screen.getAllByText('TCP')[0]).toBeInTheDocument()
   })
 })
