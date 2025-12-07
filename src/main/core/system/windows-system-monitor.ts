@@ -3,6 +3,7 @@ import { exec } from 'child_process'
 import { logger } from '@infra/logging'
 import type { TCCEvent } from '@shared/interfaces/common'
 import { BaseSystemMonitor } from './base-system-monitor'
+import { FRIENDLY_APP_NAMES } from '@main/config/constants'
 
 interface ActiveSession {
   event: TCCEvent
@@ -44,20 +45,6 @@ const SYSTEM_PROCESSES = new Set([
   'spoolsv.exe',
   'wudfhost.exe'
 ])
-
-const KNOWN_APP_NAMES: Record<string, string> = {
-  teams: 'Microsoft Teams',
-  zoom: 'Zoom',
-  discord: 'Discord',
-  slack: 'Slack',
-  chrome: 'Google Chrome',
-  msedge: 'Microsoft Edge',
-  firefox: 'Mozilla Firefox',
-  obs64: 'OBS Studio',
-  obs32: 'OBS Studio',
-  streamlabs: 'Streamlabs',
-  skype: 'Skype'
-}
 
 export class WindowsSystemMonitor extends BaseSystemMonitor {
   private activeSessions: Map<string, ActiveSession> = new Map()
@@ -240,7 +227,7 @@ export class WindowsSystemMonitor extends BaseSystemMonitor {
   private getDisplayName(appName: string): string {
     const displayName = appName.replace(/\.exe$/i, '')
     const lowerName = displayName.toLowerCase()
-    for (const [key, value] of Object.entries(KNOWN_APP_NAMES)) {
+    for (const [key, value] of Object.entries(FRIENDLY_APP_NAMES)) {
       if (lowerName.includes(key)) {
         return value
       }
