@@ -11,15 +11,6 @@ import {
   getInterfaceSelection,
   updateAnalyzerInterfaces
 } from './analyzer-runner'
-import {
-  startHardwareMonitor,
-  stopHardwareMonitor,
-  setMainWindow as setHardwareMainWindow,
-  setProcessTracker,
-  setSystemMonitor,
-  getHardwareStatus,
-  getHardwareSummary
-} from './hardware-runner'
 import { ProcessTracker } from '@main/core/network/process-tracker'
 import { registerAppLifecycleHandlers, registerProcessSignalHandlers } from './lifecycle'
 import {
@@ -55,8 +46,6 @@ export async function startApp(): Promise<void> {
       stopAnalyzer()
       return getInterfaceSelection()
     })
-    ipcMain.handle('hardware:getStatus', async () => getHardwareStatus())
-    ipcMain.handle('hardware:getSummary', async () => getHardwareSummary())
 
     // System Monitor handlers
     ipcMain.handle('system:start', () => {
@@ -94,19 +83,18 @@ export async function startApp(): Promise<void> {
 
   const mainWindow = createMainWindow()
   setMainWindow(mainWindow)
-  setHardwareMainWindow(mainWindow)
 
-  // Initialize process tracker for hardware monitoring
-  const processTracker = new ProcessTracker()
-  setProcessTracker(processTracker)
-  try {
-    await processTracker.startPolling()
-  } catch (error) {
-    logger.error('Failed to start process tracker:', error)
-    // Abort further initialization if process tracker is critical
-    throw new Error(
-      'Failed to start process tracker: ' + (error instanceof Error ? error.message : String(error))
-    )
+  // Initialize ProcessTracker for Linux system monitor (if needed)
+  let processTracker: ProcessTracker | undefined
+  if (process.platform === 'linux') {
+    processTracker = new ProcessTracker()
+    try {
+      await processTracker.startPolling()
+      logger.info('Process tracker started for Linux system monitor')
+    } catch (error) {
+      logger.error('Failed to start process tracker:', error)
+      // Continue without process tracker - Linux monitor will log an error
+    }
   }
 
   // Initialize System Monitor (platform-specific)
@@ -121,32 +109,16 @@ export async function startApp(): Promise<void> {
     try {
       systemMonitor.start()
       logger.info('System monitor started')
-      // Pass system monitor to hardware runner for unified monitoring
-      setSystemMonitor(systemMonitor)
     } catch (error) {
       logger.warn('Failed to start system monitor', error)
     }
   }
-
-  // Start hardware monitoring (unified across platforms)
-  // On macOS/Windows: uses system monitoring data
-  // On Linux: uses direct device checking
-  try {
-    await startHardwareMonitor()
-  } catch (error) {
-    logger.error('Failed to start hardware monitor:', error)
-    throw new Error(
-      'Failed to start hardware monitor: ' +
-        (error instanceof Error ? error.message : String(error))
-    )
-  }
 }
 
-export async function shutdownApp(): Promise<void> {
+export function shutdownApp(): void {
   // Shutdown logger BEFORE cleanup code runs to prevent "worker is ending" errors
   logger.shutdown()
   stopAnalyzer()
-  await stopHardwareMonitor()
   systemMonitor?.stop()
   systemMonitor = null
   app.quit()

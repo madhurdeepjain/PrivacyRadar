@@ -1,7 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { logger } from '@infra/logging'
 import { stopAnalyzer } from './analyzer-runner'
-import { stopHardwareMonitor } from './hardware-runner'
 
 export function registerAppLifecycleHandlers(createWindow: () => BrowserWindow): void {
   app.on('activate', () => {
@@ -10,7 +9,6 @@ export function registerAppLifecycleHandlers(createWindow: () => BrowserWindow):
 
   app.on('window-all-closed', () => {
     stopAnalyzer()
-    void stopHardwareMonitor()
     if (process.platform !== 'darwin') app.quit()
   })
 
@@ -19,7 +17,6 @@ export function registerAppLifecycleHandlers(createWindow: () => BrowserWindow):
     // This ensures no cleanup code tries to log after the worker thread is terminated
     logger.shutdown()
     stopAnalyzer()
-    void stopHardwareMonitor()
   })
 }
 
@@ -29,7 +26,6 @@ export function registerProcessSignalHandlers(): void {
     // Shutdown logger BEFORE cleanup to prevent "worker is ending" errors
     logger.shutdown()
     stopAnalyzer()
-    void stopHardwareMonitor()
     app.quit()
   }
 
