@@ -46,17 +46,17 @@ const SYSTEM_PROCESSES = new Set([
 ])
 
 const KNOWN_APP_NAMES: Record<string, string> = {
-  'teams': 'Microsoft Teams',
-  'zoom': 'Zoom',
-  'discord': 'Discord',
-  'slack': 'Slack',
-  'chrome': 'Google Chrome',
-  'msedge': 'Microsoft Edge',
-  'firefox': 'Mozilla Firefox',
-  'obs64': 'OBS Studio',
-  'obs32': 'OBS Studio',
-  'streamlabs': 'Streamlabs',
-  'skype': 'Skype'
+  teams: 'Microsoft Teams',
+  zoom: 'Zoom',
+  discord: 'Discord',
+  slack: 'Slack',
+  chrome: 'Google Chrome',
+  msedge: 'Microsoft Edge',
+  firefox: 'Mozilla Firefox',
+  obs64: 'OBS Studio',
+  obs32: 'OBS Studio',
+  streamlabs: 'Streamlabs',
+  skype: 'Skype'
 }
 
 export class WindowsSystemMonitor extends BaseSystemMonitor {
@@ -110,10 +110,7 @@ export class WindowsSystemMonitor extends BaseSystemMonitor {
 
   private async scanCurrentUsage(): Promise<void> {
     try {
-      await Promise.all([
-        this.detectCameraUsage(),
-        this.detectMicrophoneUsage()
-      ])
+      await Promise.all([this.detectCameraUsage(), this.detectMicrophoneUsage()])
     } catch (error) {
       logger.error('Error scanning current usage:', error)
     }
@@ -175,9 +172,7 @@ export class WindowsSystemMonitor extends BaseSystemMonitor {
     })
   }
 
-
   private getProcessInfoByPath(appPath: string, service: string): void {
-
     const exeName = appPath.split('\\').pop()?.replace('.exe', '') || appPath
     const isUWP = appPath.includes('_8wekyb3d8bbwe') || appPath.includes('_')
 
@@ -240,20 +235,20 @@ export class WindowsSystemMonitor extends BaseSystemMonitor {
   private isSystemProcess(name: string): boolean {
     const lowerName = name.toLowerCase()
     return SYSTEM_PROCESSES.has(lowerName)
-}
+  }
 
   private getDisplayName(appName: string): string {
     const displayName = appName.replace(/\.exe$/i, '')
     const lowerName = displayName.toLowerCase()
     for (const [key, value] of Object.entries(KNOWN_APP_NAMES)) {
-    if (lowerName.includes(key)) {
-      return value
+      if (lowerName.includes(key)) {
+        return value
       }
     }
 
     return displayName
       .split(/[-_\s]/)
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ')
   }
 

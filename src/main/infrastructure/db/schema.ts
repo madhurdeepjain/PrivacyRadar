@@ -23,7 +23,7 @@ export const globalSnapshots = sqliteTable('global_snapshots', {
   interfaceName: text('interface_name').notNull(),
   totalPackets: integer('total_packets').notNull().default(0),
   totalBytesSent: integer('total_bytes_sent').notNull().default(0),
-  totalBytesRecvd: integer('total_bytes_recvd').notNull().default(0),
+  totalBytesReceived: integer('total_bytes_recvd').notNull().default(0),
   ipv4Packets: integer('ipv4_packets').notNull().default(0),
   ipv6Packets: integer('ipv6_packets').notNull().default(0),
   tcpPackets: integer('tcp_packets').notNull().default(0),
