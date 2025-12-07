@@ -13,7 +13,7 @@ function NetworkMonitor({
     <main className="flex-1 flex flex-col overflow-hidden relative bg-muted/10">
       <AnimatePresence mode="wait">
         <motion.div
-          key={advancedMode}
+          key={advancedMode.toString()}
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
