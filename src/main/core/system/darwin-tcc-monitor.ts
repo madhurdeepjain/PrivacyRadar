@@ -1,86 +1,122 @@
-import { spawn, ChildProcess, exec, execSync } from 'child_process'
+import { spawn, ChildProcess, exec } from 'child_process'
 import { BrowserWindow } from 'electron'
 import { logger } from '@infra/logging'
 import type { TCCEvent } from '@shared/interfaces/common'
 import { BaseSystemMonitor } from './base-system-monitor'
 import { FRIENDLY_APP_NAMES } from '@config/constants'
 
+/**
+ * ============================================================================
+ * macOS TCC (Transparency, Consent, and Control) Hardware Monitor
+ * ============================================================================
+ *
+ * This monitor detects when apps use privacy-sensitive hardware on macOS:
+ * - Microphone
+ * - Camera
+ * - Screen Capture/Recording
+ *
+ * ## Detection Strategy
+ *
+ * We use TWO complementary detection methods:
+ *
+ * 1. **TCC Log Streaming** (Real-time)
+ *    - Watches macOS unified logs for TCC access events
+ *    - Provides real-time detection when apps REQUEST hardware access
+ *    - Correlates msgID across log lines to get: service, responsible app, result
+ *
+ * 2. **pmset Assertions** (Polling)
+ *    - Polls `pmset -g assertions` every 3 seconds
+ *    - Detects apps CURRENTLY using hardware (audio-in, recording assertions)
+ *    - Catches apps that started before our monitor
+ *    - Verifies sessions are still active
+ *
+ * ## Key Concepts
+ *
+ * - **Responsible App**: macOS tracks which user-facing app is "responsible"
+ *   for hardware access, even when a helper process makes the actual request.
+ *   Example: Discord Helper requests mic, but Discord.app is "responsible".
+ *
+ * - **System Mediators**: Processes like coreaudiod, tccd that mediate hardware
+ *   access on behalf of apps. We ignore these as the "user" of hardware.
+ *
+ * - **Session**: A continuous period of hardware usage by an app.
+ *   We track start time, update lastSeen, and emit events on start/end.
+ */
+
+// =============================================================================
+// Types
+// =============================================================================
+
 interface ActiveSession {
   event: TCCEvent
   startTime: Date
   lastSeen: Date
+  verifiedByPmset: boolean
 }
 
-interface HardwareUsage {
+interface PendingTCCRequest {
+  msgId: string
   service: string
-  appName: string
-  displayName: string
-  pid: number
-  bundleId: string
-  startTime: Date
+  timestamp: Date
+  responsibleBundleId?: string
+  responsiblePath?: string
+  responsiblePid?: number
 }
 
-// System processes that should be ignored (they have permissions but aren't user apps)
-const SYSTEM_PROCESSES = new Set([
-  'windowserver',
-  'dock',
-  'finder',
-  'systemuiserver',
-  'loginwindow',
-  'screencaptureui',
-  'tccd',
-  'distnoted',
+// =============================================================================
+// Constants
+// =============================================================================
+
+/** System processes that mediate hardware access - not the actual users */
+const SYSTEM_MEDIATORS = new Set([
   'coreaudiod',
-  'audioclipd',
+  'tccd',
+  'replayd',
+  'windowserver',
+  'systemsoundserverd',
+  'avconferenced',
   'appleh13camerad',
-  'mediaremoted',
+  'vdcassistant',
   'coreservicesd',
   'controlcenter',
-  'notificationcenterui',
-  'airplayuiagent',
-  'sharingd',
-  'usernoted',
-  'useractivityd',
-  'corespeechd',
-  'assistantd',
-  'siriknowledged',
-  'imagent',
-  'imtransferagent',
-  'callservicesd',
-  'avconferenced',
-  'bluetoothaudiagent',
-  'universalaccessd',
-  'contextstored',
-  'continuitycaptureagent',
-  'rapportd',
-  'replayd',
-  'screensharingd',
-  'remotemanagementd',
-  'launchservicesd',
-  'powerd',
-  'cfprefsd'
+  'applecamerad'
 ])
 
-/**
- * macOS Hardware & Privacy Monitor
- *
- * Monitors actual hardware usage (camera, microphone, screen capture) on macOS.
- * Uses a focused approach that only reports genuine user-facing app usage,
- * filtering out system daemons and background processes.
- *
- * Platform: macOS (Darwin) only
- * Requirements: macOS 10.14+
- */
+/** Bundle ID prefixes for system components */
+const SYSTEM_BUNDLE_PREFIXES = [
+  'com.apple.tccd',
+  'com.apple.audio.',
+  'com.apple.replayd',
+  'com.apple.WindowServer',
+  'com.apple.avfaudio',
+  'com.apple.cmio'
+]
+
+// =============================================================================
+// Main Monitor Class
+// =============================================================================
+
 export class TCCMonitor extends BaseSystemMonitor {
+  // TCC log streaming
   private logProcess: ChildProcess | null = null
-  private buffer: string = ''
-  private activeSessions: Map<string, ActiveSession> = new Map()
+  private logBuffer = ''
+  private pendingRequests = new Map<string, PendingTCCRequest>()
+
+  // Session management
+  private activeSessions = new Map<string, ActiveSession>()
+
+  // Polling intervals
+  private pmsetInterval: NodeJS.Timeout | null = null
   private sessionCheckInterval: NodeJS.Timeout | null = null
-  private pollInterval: NodeJS.Timeout | null = null
+  private cleanupInterval: NodeJS.Timeout | null = null
 
   constructor(window: BrowserWindow) {
     super(window)
   }
+
+  // ===========================================================================
+  // Lifecycle
+  // ===========================================================================
 
   start(): void {
     if (this.logProcess) {
@@ -89,689 +125,553 @@ export class TCCMonitor extends BaseSystemMonitor {
     }
 
     if (process.platform !== 'darwin') {
-      logger.error('TCC Monitor is only supported on macOS')
+      logger.error('TCC Monitor only works on macOS')
       return
     }
 
     this.isActive = true
 
-    // Immediately scan for current hardware usage
-    this.scanCurrentUsage()
+    // Start TCC log streaming for real-time detection
+    this.startTCCLogStream()
 
-    // Start streaming logs for real-time detection
-    this.startLogStream()
+    // Immediately detect already-active hardware usage
+    this.pollPmsetAssertions()
 
-    // Poll for hardware usage every 3 seconds
-    this.pollInterval = setInterval(() => {
-      this.scanCurrentUsage()
-    }, 3000)
+    // Set up polling intervals
+    this.pmsetInterval = setInterval(() => this.pollPmsetAssertions(), 3000)
+    this.sessionCheckInterval = setInterval(() => this.checkStaleSessions(), 5000)
+    this.cleanupInterval = setInterval(() => this.cleanupPendingRequests(), 10000)
 
-    // Check for ended sessions every 5 seconds
-    this.sessionCheckInterval = setInterval(() => {
-      this.checkSessionTimeouts()
-    }, 5000)
-
-    logger.info('macOS Hardware Monitor started')
+    logger.info('macOS Hardware Monitor started (TCC-based detection)')
   }
 
-  private startLogStream(): void {
-    // Stream TCC events for permission requests AND actual usage indicators
-    // - com.apple.TCC: permission checks (camera, microphone, screen capture)
-    // - com.apple.cmio: CoreMediaIO for camera usage
-    // - com.apple.coreaudio: CoreAudio for microphone usage
-    const predicate = `(subsystem == "com.apple.TCC" AND category == "access") OR
-                       (subsystem == "com.apple.cmio" AND (eventMessage CONTAINS "Start" OR eventMessage CONTAINS "Stop" OR eventMessage CONTAINS "client")) OR
-                       (subsystem == "com.apple.coreaudio" AND (eventMessage CONTAINS "input" OR eventMessage CONTAINS "Input" OR eventMessage CONTAINS "recording" OR eventMessage CONTAINS "Recording"))`
+  stop(): void {
+    // Stop TCC log stream
+    if (this.logProcess) {
+      this.logProcess.kill()
+      this.logProcess = null
+    }
+
+    // Clear intervals
+    if (this.pmsetInterval) clearInterval(this.pmsetInterval)
+    if (this.sessionCheckInterval) clearInterval(this.sessionCheckInterval)
+    if (this.cleanupInterval) clearInterval(this.cleanupInterval)
+    this.pmsetInterval = null
+    this.sessionCheckInterval = null
+    this.cleanupInterval = null
+
+    this.isActive = false
+
+    // End all active sessions
+    for (const key of this.activeSessions.keys()) {
+      this.endSession(key)
+    }
+
+    this.activeSessions.clear()
+    this.pendingRequests.clear()
+
+    logger.info('macOS Hardware Monitor stopped')
+  }
+
+  getActiveSessions(): TCCEvent[] {
+    const now = Date.now()
+    return Array.from(this.activeSessions.values()).map((session) => ({
+      ...session.event,
+      duration: Math.floor((now - session.startTime.getTime()) / 1000)
+    }))
+  }
+
+  // ===========================================================================
+  // TCC Log Streaming (Real-time detection)
+  // ===========================================================================
+
+  private startTCCLogStream(): void {
+    const predicate = 'subsystem == "com.apple.TCC" AND category == "access"'
 
     this.logProcess = spawn('log', ['stream', '--predicate', predicate, '--style', 'ndjson'])
 
     this.logProcess.stdout?.on('data', (data: Buffer) => {
-      this.buffer += data.toString()
-      this.processBuffer()
+      this.logBuffer += data.toString()
+      this.processTCCLogBuffer()
     })
 
     this.logProcess.stderr?.on('data', (data: Buffer) => {
       const msg = data.toString()
       if (!msg.includes('Filtering')) {
-        logger.debug('Log stream message:', msg)
+        logger.debug('TCC log stream:', msg)
       }
     })
 
     this.logProcess.on('close', (code) => {
       if (this.isActive) {
-        logger.info(`Log stream stopped with code ${code}, restarting...`)
-        setTimeout(() => {
-          if (this.isActive) {
-            this.startLogStream()
-          }
-        }, 1000)
+        logger.info(`TCC log stream closed (code ${code}), restarting...`)
+        setTimeout(() => this.isActive && this.startTCCLogStream(), 1000)
       }
     })
   }
 
-  stop(): void {
-    if (this.logProcess) {
-      this.logProcess.kill()
-      this.logProcess = null
+  private processTCCLogBuffer(): void {
+    const lines = this.logBuffer.split('\n')
+    this.logBuffer = lines.pop() || ''
+
+    for (const line of lines) {
+      if (line.trim().startsWith('{')) {
+        this.parseTCCLogLine(line)
+      }
     }
-    if (this.sessionCheckInterval) {
-      clearInterval(this.sessionCheckInterval)
-      this.sessionCheckInterval = null
-    }
-    if (this.pollInterval) {
-      clearInterval(this.pollInterval)
-      this.pollInterval = null
-    }
-    this.isActive = false
-    this.activeSessions.clear()
-    logger.info('macOS Hardware Monitor stopped')
   }
 
   /**
-   * Scan for currently active camera and microphone usage
+   * Parse a TCC log line. TCC events come in multiple related lines with shared msgID:
+   * - AUTHREQ_CTX: service type (Microphone, Camera, ScreenCapture)
+   * - AUTHREQ_ATTRIBUTION: responsible app info
+   * - AUTHREQ_RESULT: whether access was allowed
    */
-  private async scanCurrentUsage(): Promise<void> {
+  private parseTCCLogLine(line: string): void {
     try {
-      await Promise.all([
-        this.detectCameraUsage(),
-        this.detectMicrophoneUsage(),
-        this.detectScreenCaptureUsage()
-      ])
-    } catch (error) {
-      logger.error('Error scanning current usage:', error)
-    }
-  }
+      const entry = JSON.parse(line)
+      const message = entry.eventMessage || ''
 
-  /**
-   * Detect apps currently using the camera
-   * Uses the macOS camera indicator system
-   */
-  private async detectCameraUsage(): Promise<void> {
-    return new Promise((resolve) => {
-      // Check which user apps are using camera via VDC (Video Device Control)
-      // This command finds processes that have the camera device open
-      const cmd = `lsof 2>/dev/null | grep -E "AppleH.*Camera|VDCAssistant|CMIODaemonExtension" | awk '{print $2}' | sort -u`
+      const msgIdMatch = message.match(/msgID=([^,\s]+)/)
+      if (!msgIdMatch) return
 
-      exec(cmd, (error, stdout) => {
-        if (error || !stdout.trim()) {
-          resolve()
-          return
-        }
+      const msgId = msgIdMatch[1]
 
-        const pids = stdout
-          .trim()
-          .split('\n')
-          .map((p) => parseInt(p))
-          .filter((p) => !isNaN(p))
-
-        for (const pid of pids) {
-          this.getProcessInfo(pid).then((info) => {
-            if (info && !this.isSystemProcess(info.name)) {
-              this.reportHardwareUsage({
-                service: 'Camera',
-                appName: info.name,
-                displayName: info.displayName,
-                pid,
-                bundleId: info.bundleId,
-                startTime: new Date()
-              })
-            }
-          })
-        }
-        resolve()
-      })
-    })
-  }
-
-  /**
-   * Detect apps currently using the microphone
-   * Uses multiple detection methods for better coverage on Intel and Apple Silicon
-   */
-  private async detectMicrophoneUsage(): Promise<void> {
-    return new Promise((resolve) => {
-      // Method 1: Check for apps with audio device file handles (works on Intel)
-      const lsofCmd = `lsof 2>/dev/null | grep -E "AppleHDAEngineInput|AudioInjector|AppleUSBAudio" | awk '{print $2}' | sort -u`
-
-      exec(lsofCmd, (error, stdout) => {
-        if (!error && stdout.trim()) {
-          const pids = stdout
-            .trim()
-            .split('\n')
-            .map((p) => parseInt(p))
-            .filter((p) => !isNaN(p))
-
-          for (const pid of pids) {
-            this.getProcessInfo(pid).then((info) => {
-              if (info && !this.isSystemProcess(info.name)) {
-                this.reportHardwareUsage({
-                  service: 'Microphone',
-                  appName: info.name,
-                  displayName: info.displayName,
-                  pid,
-                  bundleId: info.bundleId,
-                  startTime: new Date()
-                })
-              }
-            })
-          }
-        }
-
-        // Method 2: Check for known audio recording apps that are running
-        this.detectMicrophoneViaKnownApps()
-        resolve()
-      })
-    })
-  }
-
-  /**
-   * Check for known microphone-using apps that are currently running
-   */
-  private detectMicrophoneViaKnownApps(): void {
-    // Check for common audio recording apps
-    const knownMicApps = [
-      'Voice Memos',
-      'VoiceMemos',
-      'QuickTime Player',
-      'GarageBand',
-      'Logic Pro',
-      'Audacity',
-      'zoom.us',
-      'FaceTime',
-      'Discord',
-      'Slack',
-      'Microsoft Teams',
-      'Skype'
-    ]
-
-    const pattern = knownMicApps.map((app) => app.replace(/ /g, '.')).join('|')
-    const cmd = `ps aux 2>/dev/null | grep -iE "${pattern}" | grep -v grep`
-
-    exec(cmd, (error, stdout) => {
-      if (error || !stdout.trim()) return
-
-      const lines = stdout.trim().split('\n')
-      for (const line of lines) {
-        const parts = line.split(/\s+/)
-        if (parts.length >= 2) {
-          const pid = parseInt(parts[1])
-          if (!isNaN(pid)) {
-            // Check if this app is actually recording (has microphone TCC permission active)
-            this.checkMicrophoneAccess(pid)
-          }
-        }
+      if (message.includes('AUTHREQ_CTX:')) {
+        this.handleTCCContext(msgId, message, entry)
+      } else if (message.includes('AUTHREQ_ATTRIBUTION:')) {
+        this.handleTCCAttribution(msgId, message)
+      } else if (message.includes('AUTHREQ_RESULT:')) {
+        this.handleTCCResult(msgId, message)
       }
+    } catch {
+      // Skip malformed JSON
+    }
+  }
+
+  private handleTCCContext(msgId: string, message: string, entry: unknown): void {
+    const serviceMatch = message.match(/service=kTCCService(\w+)/)
+    if (!serviceMatch) return
+
+    const rawService = serviceMatch[1]
+    const service = this.normalizeService(rawService)
+    if (!service) return
+
+    this.pendingRequests.set(msgId, {
+      msgId,
+      service,
+      timestamp: new Date((entry as { timestamp?: string }).timestamp || Date.now())
     })
   }
 
-  /**
-   * Check if a process is actively using the microphone via TCC
-   */
-  private checkMicrophoneAccess(pid: number): void {
-    this.getProcessInfo(pid).then((info) => {
-      if (!info || this.isSystemProcess(info.name)) return
+  private handleTCCAttribution(msgId: string, message: string): void {
+    const pending = this.pendingRequests.get(msgId)
+    if (!pending) return
 
-      // Check if this process has recently accessed microphone via TCC logs
-      const cmd = `log show --last 30s --predicate 'subsystem == "com.apple.TCC" AND eventMessage CONTAINS "kTCCServiceMicrophone" AND eventMessage CONTAINS "${info.name}"' 2>/dev/null | head -1`
+    // Extract responsible app from: responsible={TCCDProcess: identifier=X, pid=Y, ..., responsible_path=Z}
+    const match = message.match(
+      /responsible=\{TCCDProcess:\s*identifier=([^,]+),\s*pid=(\d+),.*?responsible_path=([^,}]+)/
+    )
 
-      exec(cmd, (error, stdout) => {
-        if (!error && stdout.trim()) {
-          this.reportHardwareUsage({
-            service: 'Microphone',
-            appName: info.name,
-            displayName: info.displayName,
-            pid,
-            bundleId: info.bundleId,
-            startTime: new Date()
-          })
-        }
-      })
-    })
+    if (match) {
+      pending.responsibleBundleId = match[1].trim()
+      pending.responsiblePid = parseInt(match[2])
+      pending.responsiblePath = match[3].trim()
+    }
   }
 
-  /**
-   * Detect apps actively recording/sharing the screen
-   * Only detects apps that are genuinely capturing screen content
-   */
-  private async detectScreenCaptureUsage(): Promise<void> {
-    return new Promise((resolve) => {
-      // Look for known screen recording apps that are actively running
-      // This is more conservative - we only report apps known to be screen recording tools
-      const knownRecorders = [
-        'obs',
-        'OBS',
-        'QuickTime Player',
-        'ScreenFlow',
-        'Camtasia',
-        'Loom',
-        'screencapture',
-        'Screenshot',
-        'CleanShot'
-      ]
+  private handleTCCResult(msgId: string, message: string): void {
+    const pending = this.pendingRequests.get(msgId)
+    this.pendingRequests.delete(msgId)
 
-      const pattern = knownRecorders.join('|')
-      const cmd = `ps aux 2>/dev/null | grep -iE "${pattern}" | grep -v grep`
+    if (!pending?.responsibleBundleId) return
 
-      exec(cmd, (error, stdout) => {
-        if (error || !stdout.trim()) {
-          resolve()
-          return
-        }
+    // Check if access was allowed (authValue=2)
+    const authMatch = message.match(/authValue=(\d+)/)
+    const allowed = authMatch ? parseInt(authMatch[1]) === 2 : false
 
-        const lines = stdout.trim().split('\n')
-        for (const line of lines) {
-          const parts = line.split(/\s+/)
-          if (parts.length >= 2) {
-            const pid = parseInt(parts[1])
-            if (!isNaN(pid)) {
-              this.getProcessInfo(pid).then((info) => {
-                if (info && !this.isSystemProcess(info.name)) {
-                  // Verify this is actually a screen recording session
-                  // QuickTime in particular might just be open without recording
-                  if (this.isActivelyRecording(info.name)) {
-                    this.reportHardwareUsage({
-                      service: 'ScreenCapture',
-                      appName: info.name,
-                      displayName: info.displayName,
-                      pid,
-                      bundleId: info.bundleId,
-                      startTime: new Date()
-                    })
-                  }
-                }
-              })
-            }
-          }
-        }
-        resolve()
-      })
-    })
-  }
+    if (!allowed) return
 
-  /**
-   * Check if an app is actively recording (not just open)
-   */
-  private isActivelyRecording(appName: string): boolean {
-    const lowerName = appName.toLowerCase()
-
-    // OBS is always recording if running in studio mode
-    if (lowerName.includes('obs')) {
-      return true // OBS is typically only launched for recording/streaming
+    // Skip system processes
+    if (this.isSystemProcess(pending.responsibleBundleId, pending.responsiblePath || '')) {
+      return
     }
 
-    // screencapture is always actively capturing
-    if (lowerName === 'screencapture') {
-      return true
-    }
-
-    // For other apps, we'd need more sophisticated detection
-    // For now, be conservative and only report definite recorders
-    return (
-      lowerName.includes('loom') ||
-      lowerName.includes('screenflow') ||
-      lowerName.includes('camtasia')
+    // Create or update session
+    this.createOrUpdateSession(
+      pending.responsibleBundleId,
+      pending.service,
+      pending.responsiblePath || '',
+      pending.responsiblePid || 0,
+      false // Not verified by pmset yet
     )
   }
 
+  private normalizeService(rawService: string): string | null {
+    switch (rawService) {
+      case 'Microphone':
+      case 'AudioCapture':
+        return 'Microphone'
+      case 'Camera':
+        return 'Camera'
+      case 'ScreenCapture':
+        return 'ScreenCapture'
+      default:
+        return null
+    }
+  }
+
+  // ===========================================================================
+  // pmset Polling (Active usage detection)
+  // ===========================================================================
+
   /**
-   * Get full process information for a PID
+   * Poll pmset assertions to detect active hardware usage.
+   *
+   * pmset shows power assertions including:
+   * - audio-in: Microphone usage (via coreaudiod, Created for PID: X)
+   * - "recording" assertions: Camera usage (e.g., "Photo Booth recording")
    */
-  private async getProcessInfo(
-    pid: number
-  ): Promise<{ name: string; displayName: string; bundleId: string } | null> {
-    return new Promise((resolve) => {
-      try {
-        // Get the full command/path for the process
-        const result = execSync(`ps -p ${pid} -o comm= 2>/dev/null`, { encoding: 'utf-8' }).trim()
+  private pollPmsetAssertions(): void {
+    exec('pmset -g assertions 2>/dev/null', (error, stdout) => {
+      if (error || !stdout) return
 
-        if (!result) {
-          resolve(null)
-          return
-        }
+      const activeMicPids = new Set<number>()
+      const activeCameraPids = new Set<number>()
 
-        const appName = this.extractAppName(result)
-        const displayName = this.getDisplayName(appName)
+      this.parsePmsetOutput(stdout, activeMicPids, activeCameraPids)
 
-        // Try to get bundle ID for .app bundles
-        let bundleId = appName
-        const appPath = this.getAppPath(pid)
-        if (appPath) {
-          bundleId = appPath
-        }
-
-        resolve({ name: appName, displayName, bundleId })
-      } catch {
-        resolve(null)
-      }
+      // Update sessions based on current pmset state
+      this.updateMicrophoneSessions(activeMicPids)
+      this.updateCameraSessions(activeCameraPids)
     })
   }
 
-  /**
-   * Try to get the .app bundle path for a process
-   */
-  private getAppPath(pid: number): string | null {
-    try {
-      const result = execSync(
-        `lsof -p ${pid} 2>/dev/null | grep -E "\\.app/" | head -1 | awk '{print $9}'`,
-        {
-          encoding: 'utf-8'
-        }
-      ).trim()
+  private parsePmsetOutput(output: string, micPids: Set<number>, cameraPids: Set<number>): void {
+    const lines = output.split('\n')
 
-      if (result && result.includes('.app')) {
-        const appMatch = result.match(/^(.*?\.app)/)
-        return appMatch ? appMatch[1] : null
+    let currentOwnerPid = 0
+    let currentOwnerName = ''
+    let currentDurationSecs = 0
+    let currentAssertionName = ''
+    let createdForPid: number | null = null
+    let sawResourceLine = false
+
+    for (const line of lines) {
+      // Match: pid 614(coreaudiod): [0x...] 00:05:30 Type named: "assertion name"
+      const ownerMatch = line.match(
+        /^\s*pid\s+(\d+)\(([^)]+)\):\s*\[[^\]]+\]\s*(\d+):(\d+):(\d+)\s+\w+\s+named:\s*"([^"]+)"/
+      )
+
+      if (ownerMatch) {
+        // Process previous assertion if it had audio-in resource
+        if (createdForPid !== null && sawResourceLine) {
+          micPids.add(createdForPid)
+          this.handleMicrophoneDetection(createdForPid)
+        }
+
+        currentOwnerPid = parseInt(ownerMatch[1])
+        currentOwnerName = ownerMatch[2]
+        currentDurationSecs =
+          parseInt(ownerMatch[3]) * 3600 + parseInt(ownerMatch[4]) * 60 + parseInt(ownerMatch[5])
+        currentAssertionName = ownerMatch[6]
+        createdForPid = null
+        sawResourceLine = false
+
+        // Check for camera "recording" assertion (not audio-related)
+        const nameLower = currentAssertionName.toLowerCase()
+        if (nameLower.includes('recording') && !nameLower.includes('audio')) {
+          // Only consider recent assertions (< 10 minutes)
+          if (currentDurationSecs < 600) {
+            cameraPids.add(currentOwnerPid)
+            this.handleCameraDetection(currentOwnerPid, currentOwnerName)
+          }
+        }
+
+        continue
       }
-    } catch {
-      // Ignore errors
+
+      // Match: Created for PID: 45896.
+      const createdMatch = line.match(/Created for PID:\s*(\d+)/)
+      if (createdMatch) {
+        createdForPid = parseInt(createdMatch[1])
+        continue
+      }
+
+      // Match: Resources: audio-in ...
+      const resourceMatch = line.match(/Resources:\s*(audio-in)/)
+      if (resourceMatch && createdForPid !== null) {
+        sawResourceLine = true
+        micPids.add(createdForPid)
+        this.handleMicrophoneDetection(createdForPid)
+      }
+    }
+  }
+
+  private handleMicrophoneDetection(pid: number): void {
+    // Check if we already have a mic session
+    const existing = this.findSessionByService('Microphone')
+    if (existing) {
+      existing.session.lastSeen = new Date()
+      existing.session.verifiedByPmset = true
+      return
+    }
+
+    // Create new session
+    this.createSessionFromPid(pid, 'Microphone')
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private handleCameraDetection(pid: number, _ownerName: string): void {
+    // Check if we already have a camera session
+    const existing = this.findSessionByService('Camera')
+    if (existing) {
+      existing.session.lastSeen = new Date()
+      existing.session.verifiedByPmset = true
+      return
+    }
+
+    // Create new session - use the owner PID (the app itself, like Photo Booth)
+    this.createSessionFromPid(pid, 'Camera')
+  }
+
+  // ===========================================================================
+  // Session Management
+  // ===========================================================================
+
+  private createOrUpdateSession(
+    bundleId: string,
+    service: string,
+    path: string,
+    pid: number,
+    verifiedByPmset: boolean
+  ): void {
+    const sessionKey = `${bundleId}-${service}`
+
+    if (this.activeSessions.has(sessionKey)) {
+      const session = this.activeSessions.get(sessionKey)!
+      session.lastSeen = new Date()
+      if (verifiedByPmset) session.verifiedByPmset = true
+      return
+    }
+
+    const appName = this.extractAppName(path)
+    const displayName = this.getDisplayName(appName, bundleId)
+    const now = new Date()
+
+    const event: TCCEvent = {
+      id: `${Date.now()}-${pid}-${service}`,
+      timestamp: now,
+      app: appName,
+      appName: displayName,
+      bundleId,
+      path,
+      service,
+      allowed: true,
+      authValue: 2,
+      authReason: 'Active Usage',
+      pid,
+      userId: process.getuid?.() || 0,
+      eventType: 'usage',
+      sessionStart: now,
+      duration: 0
+    }
+
+    this.activeSessions.set(sessionKey, {
+      event,
+      startTime: now,
+      lastSeen: now,
+      verifiedByPmset
+    })
+
+    this.sendSessionUpdate(event)
+    logger.info(`Hardware usage started: ${displayName} using ${service}`)
+  }
+
+  private createSessionFromPid(pid: number, service: string): void {
+    exec(`ps -p ${pid} -o args= 2>/dev/null`, (error, stdout) => {
+      if (error || !stdout.trim()) return
+
+      const fullPath = stdout.trim()
+      const bundleId = this.extractBundleIdFromPath(fullPath) || `pid-${pid}`
+
+      // Skip system processes
+      if (this.isSystemProcess(bundleId, fullPath)) return
+
+      this.createOrUpdateSession(bundleId, service, fullPath, pid, true)
+    })
+  }
+
+  private findSessionByService(service: string): { key: string; session: ActiveSession } | null {
+    for (const [key, session] of this.activeSessions.entries()) {
+      if (session.event.service === service) {
+        return { key, session }
+      }
     }
     return null
   }
 
-  /**
-   * Get a user-friendly display name for an app
-   */
-  private getDisplayName(appName: string): string {
-    const lowerName = appName.toLowerCase()
+  private updateMicrophoneSessions(activePids: Set<number>): void {
+    for (const [key, session] of this.activeSessions.entries()) {
+      if (session.event.service !== 'Microphone') continue
 
-    // Check known mappings
-    for (const [key, displayName] of Object.entries(FRIENDLY_APP_NAMES)) {
-      if (lowerName.includes(key)) {
-        return displayName
-      }
-    }
+      const isStillActive = activePids.has(session.event.pid)
 
-    // Clean up the name for display
-    return appName
-      .replace(/Helper.*$/i, '')
-      .replace(/Agent$/i, '')
-      .replace(/Daemon$/i, '')
-      .replace(/-/g, ' ')
-      .split(' ')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')
-      .trim()
-  }
-
-  /**
-   * Check if a process name is a system process
-   */
-  private isSystemProcess(name: string): boolean {
-    const lowerName = name.toLowerCase()
-    return SYSTEM_PROCESSES.has(lowerName) || (lowerName.endsWith('d') && lowerName.length < 15)
-  }
-
-  private reportHardwareUsage(usage: HardwareUsage): void {
-    const sessionKey = `${usage.appName}-${usage.service}-${usage.pid}`
-
-    if (!this.activeSessions.has(sessionKey)) {
-      const event: TCCEvent = {
-        id: `${Date.now()}-${usage.pid}-${usage.service}`,
-        timestamp: usage.startTime,
-        app: usage.appName,
-        appName: usage.displayName,
-        bundleId: usage.bundleId,
-        path: usage.bundleId,
-        service: usage.service,
-        allowed: true,
-        authValue: 2,
-        authReason: 'Active Usage',
-        pid: usage.pid,
-        userId: process.getuid?.() || 0,
-        eventType: 'usage',
-        sessionStart: usage.startTime,
-        duration: 0
-      }
-
-      const session: ActiveSession = {
-        event,
-        startTime: usage.startTime,
-        lastSeen: new Date()
-      }
-
-      this.activeSessions.set(sessionKey, session)
-      this.sendSessionUpdate(event)
-      logger.info(`Hardware usage detected: ${usage.displayName} using ${usage.service}`)
-    } else {
-      const session = this.activeSessions.get(sessionKey)!
-      session.lastSeen = new Date()
-    }
-  }
-
-  private processBuffer(): void {
-    const lines = this.buffer.split('\n')
-    this.buffer = lines.pop() || ''
-
-    for (const line of lines) {
-      if (line.trim()) {
-        this.parseLogEntry(line)
+      if (!isStillActive && session.verifiedByPmset) {
+        // Was active via pmset, now gone - end session
+        this.endSession(key)
+      } else if (!isStillActive) {
+        // TCC-detected, not in pmset - check staleness
+        const staleMs = Date.now() - session.lastSeen.getTime()
+        if (staleMs > 10000) this.endSession(key)
       }
     }
   }
 
-  private parseLogEntry(line: string): void {
-    try {
-      if (!line.startsWith('{')) return
+  private updateCameraSessions(activePids: Set<number>): void {
+    for (const [key, session] of this.activeSessions.entries()) {
+      if (session.event.service !== 'Camera') continue
 
-      const entry = JSON.parse(line)
-      const message = entry.eventMessage || ''
-      const subsystem = entry.subsystem || ''
-      const processPath = entry.processImagePath || ''
+      const isStillActive = activePids.has(session.event.pid)
 
-      // Handle TCC permission events (for logging/history)
-      if (subsystem === 'com.apple.TCC' && message.includes('kTCCService')) {
-        this.handleTCCEvent(entry, message, processPath)
+      if (isStillActive) {
+        session.lastSeen = new Date()
+        session.verifiedByPmset = true
+      } else if (session.verifiedByPmset) {
+        // Was active via pmset, now gone - end session
+        this.endSession(key)
+      } else {
+        // TCC-detected, check staleness
+        const staleMs = Date.now() - session.lastSeen.getTime()
+        if (staleMs > 10000) this.endSession(key)
       }
-
-      // Handle camera start/stop events from CoreMediaIO
-      if (subsystem === 'com.apple.cmio') {
-        this.handleCameraLogEvent(entry, message, processPath)
-      }
-
-      // Handle microphone events from CoreAudio
-      if (subsystem === 'com.apple.coreaudio') {
-        this.handleMicrophoneLogEvent(entry, message, processPath)
-      }
-    } catch {
-      // Skip malformed lines
     }
   }
 
-  private handleMicrophoneLogEvent(
-    entry: { processID?: number; timestamp?: string },
-    message: string,
-    processPath: string
-  ): void {
-    const pid = entry.processID || 0
-    if (pid === 0) return
+  private checkStaleSessions(): void {
+    const now = Date.now()
 
-    const appName = this.extractAppName(processPath)
-    if (this.isSystemProcess(appName)) return
+    for (const [key, session] of this.activeSessions.entries()) {
+      const staleMs = now - session.lastSeen.getTime()
 
-    const displayName = this.getDisplayName(appName)
-    const lowerMessage = message.toLowerCase()
+      // Screen capture sessions - rely on TCC logs, end after 15s inactivity
+      if (session.event.service === 'ScreenCapture' && staleMs > 15000) {
+        this.endSession(key)
+      }
 
-    // Check for audio input/recording indicators
-    if (
-      lowerMessage.includes('input') ||
-      lowerMessage.includes('recording') ||
-      lowerMessage.includes('capture') ||
-      lowerMessage.includes('start')
-    ) {
-      this.reportHardwareUsage({
-        service: 'Microphone',
-        appName,
-        displayName,
-        pid,
-        bundleId: processPath,
-        startTime: new Date(entry.timestamp || Date.now())
-      })
-    }
-  }
-
-  private handleCameraLogEvent(
-    entry: { processID?: number; timestamp?: string },
-    message: string,
-    processPath: string
-  ): void {
-    const pid = entry.processID || 0
-    if (pid === 0) return
-
-    const appName = this.extractAppName(processPath)
-    if (this.isSystemProcess(appName)) return
-
-    const displayName = this.getDisplayName(appName)
-
-    if (
-      message.includes('Start') ||
-      message.includes('begin') ||
-      message.includes('connect') ||
-      message.includes('activate')
-    ) {
-      this.reportHardwareUsage({
-        service: 'Camera',
-        appName,
-        displayName,
-        pid,
-        bundleId: processPath,
-        startTime: new Date(entry.timestamp || Date.now())
-      })
-    } else if (
-      message.includes('Stop') ||
-      message.includes('disconnect') ||
-      message.includes('deactivate')
-    ) {
-      const sessionKey = `${appName}-Camera-${pid}`
-      this.endSession(sessionKey)
-    }
-  }
-
-  private handleTCCEvent(
-    entry: { processID?: number; userID?: number; timestamp?: string },
-    message: string,
-    processPath: string
-  ): void {
-    const appName = this.extractAppName(processPath)
-    if (this.isSystemProcess(appName)) return
-
-    const displayName = this.getDisplayName(appName)
-    const service = this.extractServiceFromMessage(message)
-    const pid = entry.processID || 0
-
-    // Only track Camera, Microphone, and ScreenCapture for now
-    if (!['Camera', 'Microphone', 'ScreenCapture'].includes(service)) return
-
-    const event: TCCEvent = {
-      id: `${Date.now()}-${pid}-${service}-req`,
-      timestamp: new Date(entry.timestamp || Date.now()),
-      app: appName,
-      appName: displayName,
-      bundleId: processPath,
-      path: processPath,
-      service,
-      allowed: !message.includes('denied'),
-      authValue: message.includes('denied') ? 0 : 2,
-      authReason: message.includes('denied') ? 'Denied' : 'Allowed',
-      pid,
-      userId: entry.userID || 0,
-      eventType: 'request'
-    }
-
-    this.sendEvent(event)
-  }
-
-  private extractServiceFromMessage(message: string): string {
-    const serviceMap: Record<string, string> = {
-      kTCCServiceCamera: 'Camera',
-      kTCCServiceMicrophone: 'Microphone',
-      kTCCServiceScreenCapture: 'ScreenCapture',
-      kTCCServiceSystemPolicyAllFiles: 'FullDiskAccess',
-      kTCCServiceAddressBook: 'Contacts',
-      kTCCServiceCalendar: 'Calendar',
-      kTCCServiceReminders: 'Reminders',
-      kTCCServicePhotos: 'Photos',
-      kTCCServiceAccessibility: 'Accessibility',
-      kTCCServiceLocation: 'Location'
-    }
-
-    for (const [key, value] of Object.entries(serviceMap)) {
-      if (message.includes(key)) {
-        return value
+      // Also do process-alive check for camera after 8s
+      if (session.event.service === 'Camera' && staleMs > 8000) {
+        exec(`ps -p ${session.event.pid} -o pid= 2>/dev/null`, (error, stdout) => {
+          if (error || !stdout.trim()) {
+            this.endSession(key)
+          }
+        })
       }
     }
-    return 'Unknown'
   }
 
   private endSession(sessionKey: string): void {
     const session = this.activeSessions.get(sessionKey)
-    if (session) {
-      const duration = Math.floor((new Date().getTime() - session.startTime.getTime()) / 1000)
+    if (!session) return
 
-      this.sendSessionUpdate({
-        ...session.event,
-        sessionEnd: new Date(),
-        duration
-      })
+    const duration = Math.floor((Date.now() - session.startTime.getTime()) / 1000)
 
-      this.activeSessions.delete(sessionKey)
-      logger.info(`Hardware usage ended: ${sessionKey}`)
-    }
-  }
-
-  private checkSessionTimeouts(): void {
-    const now = new Date()
-    const timeoutMs = 10000
-
-    for (const [key, session] of this.activeSessions.entries()) {
-      const timeSinceLastSeen = now.getTime() - session.lastSeen.getTime()
-
-      if (timeSinceLastSeen > timeoutMs) {
-        this.checkProcessAlive(session.event.pid, key)
-      }
-    }
-  }
-
-  private checkProcessAlive(pid: number, sessionKey: string): void {
-    exec(`ps -p ${pid} -o pid= 2>/dev/null`, (error, stdout) => {
-      if (error || !stdout.trim()) {
-        this.endSession(sessionKey)
-      } else {
-        const session = this.activeSessions.get(sessionKey)
-        if (session) {
-          session.lastSeen = new Date()
-        }
-      }
+    this.sendSessionUpdate({
+      ...session.event,
+      sessionEnd: new Date(),
+      duration
     })
+
+    this.activeSessions.delete(sessionKey)
+    logger.info(
+      `Hardware usage ended: ${session.event.appName} stopped using ${session.event.service}`
+    )
   }
 
-  private extractAppName(pathOrBundle: string): string {
-    if (!pathOrBundle) return 'Unknown'
+  private cleanupPendingRequests(): void {
+    const maxAge = 30000
+    const now = Date.now()
 
-    // Extract app name from .app bundle path
-    // e.g., "/Applications/Photo Booth.app/Contents/MacOS/Photo Booth" -> "Photo Booth"
-    const appMatch = pathOrBundle.match(/\/([^/]+)\.app/)
+    for (const [msgId, req] of this.pendingRequests.entries()) {
+      if (now - req.timestamp.getTime() > maxAge) {
+        this.pendingRequests.delete(msgId)
+      }
+    }
+  }
+
+  // ===========================================================================
+  // Helpers
+  // ===========================================================================
+
+  private extractAppName(path: string): string {
+    if (!path) return 'Unknown'
+
+    // Try to extract from .app bundle
+    const appMatch = path.match(/\/([^/]+)\.app/)
+    if (appMatch) return appMatch[1]
+
+    // Fallback to last path component
+    return path.split('/').pop() || 'Unknown'
+  }
+
+  private extractBundleIdFromPath(path: string): string | null {
+    const appMatch = path.match(/\/([^/]+)\.app/)
     if (appMatch) {
-      return appMatch[1]
+      return `app.${appMatch[1].toLowerCase().replace(/\s+/g, '-')}`
     }
-
-    // For bare executables, get the last component
-    const parts = pathOrBundle.split('/')
-    const lastPart = parts[parts.length - 1]
-
-    if (lastPart) {
-      return lastPart
-    }
-
-    return 'Unknown'
+    return null
   }
 
-  getActiveSessions(): TCCEvent[] {
-    return Array.from(this.activeSessions.values()).map((session) => {
-      const duration = Math.floor((new Date().getTime() - session.startTime.getTime()) / 1000)
-      return {
-        ...session.event,
-        sessionStart: session.startTime,
-        duration
+  private getDisplayName(appName: string, bundleId: string): string {
+    const lowerName = appName.toLowerCase()
+    const lowerBundleId = bundleId.toLowerCase()
+
+    // Check known mappings
+    for (const [key, displayName] of Object.entries(FRIENDLY_APP_NAMES)) {
+      if (lowerName.includes(key) || lowerBundleId.includes(key)) {
+        return displayName
       }
-    })
+    }
+
+    // Common bundle ID patterns
+    if (lowerBundleId.includes('discord')) return 'Discord'
+    if (lowerBundleId.includes('slack')) return 'Slack'
+    if (lowerBundleId.includes('zoom')) return 'Zoom'
+    if (lowerBundleId.includes('teams')) return 'Microsoft Teams'
+    if (lowerBundleId.includes('facetime')) return 'FaceTime'
+
+    // Clean up name
+    return (
+      appName
+        .replace(/Helper.*$/i, '')
+        .replace(/Agent$/i, '')
+        .replace(/-/g, ' ')
+        .trim() || appName
+    )
+  }
+
+  private isSystemProcess(bundleId: string, path: string): boolean {
+    const lowerBundleId = bundleId.toLowerCase()
+    const lowerPath = path.toLowerCase()
+
+    // Check bundle ID prefixes
+    for (const prefix of SYSTEM_BUNDLE_PREFIXES) {
+      if (lowerBundleId.startsWith(prefix)) return true
+    }
+
+    // Check for system mediators in path
+    for (const mediator of SYSTEM_MEDIATORS) {
+      if (lowerPath.includes(mediator)) return true
+    }
+
+    // /System/Applications/ is for USER apps like Photo Booth, FaceTime
+    if (lowerPath.includes('/system/applications/')) return false
+
+    // Other /System/ paths are system processes
+    if (lowerPath.includes('/system/library/') || lowerPath.includes('/usr/libexec/')) {
+      return true
+    }
+
+    return false
   }
 }

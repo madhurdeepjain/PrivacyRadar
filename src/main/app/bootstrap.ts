@@ -73,10 +73,12 @@ export async function startApp(): Promise<void> {
 
     // System Monitor handlers
     ipcMain.handle('system:start', () => {
+      logger.info('System monitor start requested by user')
       systemMonitor?.start()
       return { success: true }
     })
     ipcMain.handle('system:stop', () => {
+      logger.info('System monitor stop requested by user')
       systemMonitor?.stop()
       return { success: true }
     })
