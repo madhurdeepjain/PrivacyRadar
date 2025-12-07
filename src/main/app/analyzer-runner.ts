@@ -53,13 +53,13 @@ function setupPeriodicTasks(
         const appRegs = networkAnalyzer.getApplicationRegistries()
         const procRegs = networkAnalyzer.getProcessRegistries()
         if (mainWindow && !mainWindow.isDestroyed()) {
-          if (globalReg != undefined) {
+          if (globalReg) {
             mainWindow.webContents.send('global-registry-data', globalReg)
           }
-          if (appRegs != undefined) {
+          if (appRegs) {
             mainWindow.webContents.send('application-registry-data', appRegs)
           }
-          if (procRegs != undefined) {
+          if (procRegs) {
             mainWindow.webContents.send('process-registry-data', procRegs)
           }
         }

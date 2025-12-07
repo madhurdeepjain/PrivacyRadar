@@ -14,22 +14,30 @@ import type {
 const api: API = {
   onNetworkData: (callback: (data: PacketMetadata) => void) => {
     ipcRenderer.on('network-data', (_event, data) => {
-      if (data != undefined) callback(data)
+      if (data) {
+        callback(data)
+      }
     })
   },
   onApplicationRegistryData: (callback: (data: Map<string, ApplicationRegistry>) => void) => {
     ipcRenderer.on('application-registry-data', (_event, data) => {
-      if (data != undefined) callback(data)
+      if (data) {
+        callback(data)
+      }
     })
   },
   onProcessRegistryData: (callback: (data: Map<string, ProcessRegistry>) => void) => {
     ipcRenderer.on('process-registry-data', (_event, data) => {
-      if (data != undefined) callback(data)
+      if (data) {
+        callback(data)
+      }
     })
   },
   onGlobalRegistryData: (callback: (data: Map<string, GlobalRegistry>) => void) => {
     ipcRenderer.on('global-registry-data', (_event, data) => {
-      if (data != undefined) callback(data)
+      if (data) {
+        callback(data)
+      }
     })
   },
   removeNetworkDataListener: () => {

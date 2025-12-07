@@ -6,13 +6,13 @@ import { StatCard } from './StatCard'
 import { InterfaceSelector } from './InterfaceSelector'
 // import { AppInsights } from './AppInsights'
 import { ActivityList } from './ActivityList'
-import { PacketData, AppStats, InterfaceOption } from '../types'
+import { PacketMetadata, AppStats, InterfaceOption } from '../types'
 import ExportReports from './ExportReports'
 import { AppInsights } from './AppInsights'
 
 export function AdvancedNetworkMonitor({ darkMode }: { darkMode: boolean }): React.JSX.Element {
   // State
-  const [packets, setPackets] = useState<PacketData[]>([])
+  const [packets, setPackets] = useState<PacketMetadata[]>([])
   const [packetCount, setPacketCount] = useState(0)
   const [totalBytes, setTotalBytes] = useState(0)
   const [appStatsMap, setAppStatsMap] = useState<Record<string, AppStats>>({})
@@ -54,7 +54,8 @@ export function AdvancedNetworkMonitor({ darkMode }: { darkMode: boolean }): Rea
 
   // API: Network Data Listener
   useEffect(() => {
-    const handleData = (data: PacketData): void => {
+    const handleData = (data: PacketMetadata): void => {
+      // Packets
       setPacketCount((p) => p + 1)
       setPackets((prev) => [data, ...prev].slice(0, 500))
       setTotalBytes((p) => p + data.size)
