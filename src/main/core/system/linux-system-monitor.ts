@@ -258,6 +258,18 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
     })
   }
 
+  protected sendEvent(event: TCCEvent): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('system-event', event)
+    }
+  }
+
+  protected sendSessionUpdate(event: TCCEvent): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('system-session-update', event)
+    }
+  }
+
   private async scanCurrentUsage(): Promise<void> {
     try {
       await Promise.all([
@@ -417,7 +429,11 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
   }): void {
     // Filter out system processes - they're legitimate but not user-facing apps
     if (this.isSystemProcess(usage.appName) || this.isSystemProcess(usage.displayName)) {
-      logger.debug(`Skipping system process: ${usage.displayName} (${usage.service})`)
+      try {
+        logger.debug(`Skipping system process: ${usage.displayName} (${usage.service})`)
+      } catch {
+        // Logger worker may have exited, ignore
+      }
       return
     }
 
@@ -451,7 +467,11 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
       this.activeSessions.set(sessionKey, session)
       this.sendEvent(event)
       this.sendSessionUpdate(event)
-      logger.debug(`Hardware usage detected: ${usage.displayName} using ${usage.service}`)
+      try {
+        logger.debug(`Hardware usage detected: ${usage.displayName} using ${usage.service}`)
+      } catch {
+        // Logger worker may have exited, ignore
+      }
     } else {
       const session = this.activeSessions.get(sessionKey)!
       session.lastSeen = new Date()
@@ -471,7 +491,11 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
         this.sendEvent(event)
         this.sendSessionUpdate(event)
         this.activeSessions.delete(key)
-        logger.debug(`Session ended: ${event.appName} ${event.service}`)
+        try {
+          logger.debug(`Session ended: ${event.appName} ${event.service}`)
+        } catch {
+          // Logger worker may have exited, ignore
+        }
       }
     }
   }
