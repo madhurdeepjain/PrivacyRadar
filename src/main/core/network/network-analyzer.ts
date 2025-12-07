@@ -33,9 +33,10 @@ export class NetworkAnalyzer {
   constructor(
     deviceNames: string | string[],
     localIPs: string[],
-    onPacket: (pkt: PacketMetadata) => void
+    onPacket: (pkt: PacketMetadata) => void,
+    processTracker?: ProcessTracker
   ) {
-    this.processTracker = new ProcessTracker()
+    this.processTracker = processTracker || new ProcessTracker()
     this.connectionTracker = new ConnectionTracker()
     this.procConManager = new ProcConManager(this.processTracker, this.connectionTracker, localIPs)
     this.trafficCapture = new TrafficCapture(deviceNames)

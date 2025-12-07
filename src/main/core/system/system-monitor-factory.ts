@@ -17,7 +17,7 @@ import type { ProcessTracker } from '../network/process-tracker'
  * - Linux: Linux System Monitor - monitors hardware device access
  *
  * @param window - The main BrowserWindow for sending events to renderer
- * @param processTracker - ProcessTracker instance (required for Linux)
+ * @param processTracker - Optional shared ProcessTracker instance (for Linux)
  * @returns Platform-specific system monitor implementation
  */
 export function createSystemMonitor(
@@ -37,14 +37,9 @@ export function createSystemMonitor(
       logger.info('Using Windows System Monitor (stub implementation)')
       return new WindowsSystemMonitor(window)
 
-    case 'linux': {
+    case 'linux':
       logger.info('Using Linux System Monitor')
-      const linuxMonitor = new LinuxSystemMonitor(window)
-      if (processTracker) {
-        linuxMonitor.setProcessTracker(processTracker)
-      }
-      return linuxMonitor
-    }
+      return new LinuxSystemMonitor(window, processTracker)
 
     default:
       logger.warn(`Unsupported platform: ${platform}. Using macOS TCC Monitor as fallback.`)

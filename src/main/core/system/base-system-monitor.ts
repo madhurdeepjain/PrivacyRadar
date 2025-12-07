@@ -10,7 +10,7 @@ export interface ISystemMonitor {
   /**
    * Start monitoring system permission events
    */
-  start(): void
+  start(): void | Promise<void>
 
   /**
    * Stop monitoring system permission events

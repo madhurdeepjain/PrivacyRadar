@@ -18,9 +18,11 @@ import {
   isSystemMonitoringSupported
 } from '@core/system/system-monitor-factory'
 import type { ISystemMonitor } from '@core/system/base-system-monitor'
+import { setSharedProcessTracker } from './analyzer-runner'
 
 let ipcHandlersRegistered = false
 let systemMonitor: ISystemMonitor | null = null
+let sharedProcessTracker: ProcessTracker | null = null
 
 export async function startApp(): Promise<void> {
   registerProcessSignalHandlers()
@@ -84,22 +86,17 @@ export async function startApp(): Promise<void> {
   const mainWindow = createMainWindow()
   setMainWindow(mainWindow)
 
-  // Initialize ProcessTracker for Linux system monitor (if needed)
-  let processTracker: ProcessTracker | undefined
+  // Create shared ProcessTracker for Linux (used by both NetworkAnalyzer and LinuxSystemMonitor)
+  // This avoids duplicate polling and process caching
   if (process.platform === 'linux') {
-    processTracker = new ProcessTracker()
-    try {
-      await processTracker.startPolling()
-      logger.info('Process tracker started for Linux system monitor')
-    } catch (error) {
-      logger.error('Failed to start process tracker:', error)
-      // Continue without process tracker - Linux monitor will log an error
-    }
+    sharedProcessTracker = new ProcessTracker()
+    setSharedProcessTracker(sharedProcessTracker)
+    logger.info('Created shared ProcessTracker for Linux')
   }
 
   // Initialize System Monitor (platform-specific)
-  // Pass processTracker for Linux system monitor
-  systemMonitor = createSystemMonitor(mainWindow, processTracker)
+  // Pass shared ProcessTracker to Linux monitor
+  systemMonitor = createSystemMonitor(mainWindow, sharedProcessTracker || undefined)
 
   if (!isSystemMonitoringSupported()) {
     logger.warn(
@@ -107,7 +104,7 @@ export async function startApp(): Promise<void> {
     )
   } else {
     try {
-      systemMonitor.start()
+      await systemMonitor.start()
       logger.info('System monitor started')
     } catch (error) {
       logger.warn('Failed to start system monitor', error)
@@ -116,8 +113,6 @@ export async function startApp(): Promise<void> {
 }
 
 export function shutdownApp(): void {
-  // Shutdown logger BEFORE cleanup code runs to prevent "worker is ending" errors
-  logger.shutdown()
   stopAnalyzer()
   systemMonitor?.stop()
   systemMonitor = null

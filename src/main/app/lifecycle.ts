@@ -12,19 +12,12 @@ export function registerAppLifecycleHandlers(createWindow: () => BrowserWindow):
     if (process.platform !== 'darwin') app.quit()
   })
 
-  app.on('will-quit', () => {
-    // Shutdown logger BEFORE cleanup code runs to prevent "worker is ending" errors
-    // This ensures no cleanup code tries to log after the worker thread is terminated
-    logger.shutdown()
-    stopAnalyzer()
-  })
+  app.on('will-quit', () => stopAnalyzer())
 }
 
 export function registerProcessSignalHandlers(): void {
   const handleSignal = (signal: NodeJS.Signals): void => {
     logger.info(`Received ${signal}, shutting down`)
-    // Shutdown logger BEFORE cleanup to prevent "worker is ending" errors
-    logger.shutdown()
     stopAnalyzer()
     app.quit()
   }

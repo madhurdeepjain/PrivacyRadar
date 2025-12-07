@@ -182,15 +182,13 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
   private pollInterval: NodeJS.Timeout | null = null
   private sessionCheckInterval: NodeJS.Timeout | null = null
 
-  constructor(window: BrowserWindow) {
+  constructor(window: BrowserWindow, processTracker?: ProcessTracker) {
     super(window)
+    // Use shared ProcessTracker if provided, otherwise create own
+    this.processTracker = processTracker || new ProcessTracker()
   }
 
-  setProcessTracker(tracker: ProcessTracker): void {
-    this.processTracker = tracker
-  }
-
-  start(): void {
+  async start(): Promise<void> {
     if (process.platform !== 'linux') {
       logger.error('Linux System Monitor is only supported on Linux')
       return
@@ -203,6 +201,16 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
 
     if (!this.processTracker) {
       logger.error('Process tracker not set for Linux System Monitor')
+      return
+    }
+
+    // Start ProcessTracker polling (only if not already started by NetworkAnalyzer)
+    // ProcessTracker handles multiple startPolling() calls gracefully
+    try {
+      await this.processTracker.startPolling()
+      logger.info('Process tracker started for Linux system monitor')
+    } catch (error) {
+      logger.error('Failed to start process tracker:', error)
       return
     }
 
@@ -230,6 +238,8 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
       clearInterval(this.sessionCheckInterval)
       this.sessionCheckInterval = null
     }
+    // Don't stop ProcessTracker polling - NetworkAnalyzer might still be using it
+    // ProcessTracker will be cleaned up when NetworkAnalyzer stops
     this.isActive = false
     this.activeSessions.clear()
     logger.info('Linux System Monitor stopped')
@@ -249,8 +259,6 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
   }
 
   private async scanCurrentUsage(): Promise<void> {
-    if (!this.processTracker) return
-
     try {
       await Promise.all([
         this.detectCameraUsage(),
@@ -264,8 +272,6 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
   }
 
   private async detectCameraUsage(): Promise<void> {
-    if (!this.processTracker) return
-
     const videoDevices = this.findVideoDevices()
     for (const device of videoDevices) {
       const access = await this.checkDeviceAccess(device, 'Camera')
@@ -286,8 +292,6 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
   }
 
   private async detectMicrophoneUsage(): Promise<void> {
-    if (!this.processTracker) return
-
     if (this.hasCommand('pactl')) {
       const paAccess = await this.checkPulseAudio()
       for (const acc of paAccess) {
@@ -338,8 +342,6 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
   }
 
   private async detectScreenCaptureUsage(): Promise<void> {
-    if (!this.processTracker) return
-
     const isWayland = Boolean(
       process.env.WAYLAND_DISPLAY || process.env.XDG_SESSION_TYPE === 'wayland'
     )
@@ -375,8 +377,6 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
   }
 
   private async detectGPUUsage(): Promise<void> {
-    if (!this.processTracker) return
-
     const gpuDevices = this.findGPUDevices()
     for (const device of gpuDevices) {
       const access = await this.checkDeviceAccess(device, 'GPU')
@@ -547,10 +547,6 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
     devicePath: string
     timestamp: number
   }> | null> {
-    if (!this.processTracker) {
-      return null
-    }
-
     // More restrictive validation - only allow device paths
     if (!/^\/dev\/[\w/\-.]+$/.test(devicePath) || devicePath.includes('..')) {
       logger.debug(`Invalid device path format: ${devicePath}`)
@@ -592,7 +588,7 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
             const pid = Number.parseInt(pidStr, 10)
             if (Number.isNaN(pid) || pid <= 0) continue
 
-            const procDetails = this.processTracker.getProcDetails(pid)
+            const procDetails = this.processTracker?.getProcDetails(pid)
             const resolvedProcName = procDetails?.name || procName
 
             accesses.push({
@@ -621,10 +617,6 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
     devicePath: string
     timestamp: number
   }> | null> {
-    if (!this.processTracker) {
-      return null
-    }
-
     const accesses: Array<{
       procName?: string
       pid?: number
@@ -660,7 +652,7 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
 
               if (linkTarget === devicePath || linkTarget.startsWith(devicePath)) {
                 seenPids.add(pid)
-                const procDetails = this.processTracker.getProcDetails(pid)
+                const procDetails = this.processTracker?.getProcDetails(pid)
                 accesses.push({
                   devicePath,
                   pid,
@@ -694,8 +686,6 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
       timestamp: number
     }> = []
 
-    if (!this.processTracker) return accesses
-
     try {
       const { stdout } = await execAsync('pactl list source-outputs 2>/dev/null', {
         timeout: 2000,
@@ -728,7 +718,7 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
         }
 
         if (currentPid && currentApp) {
-          const procDetails = this.processTracker.getProcDetails(currentPid)
+          const procDetails = this.processTracker?.getProcDetails(currentPid)
           accesses.push({
             devicePath: 'PulseAudio',
             pid: currentPid,
@@ -786,10 +776,6 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
       timestamp: number
     }> = []
 
-    if (!this.processTracker) {
-      return accesses
-    }
-
     // Programmatically enumerate wayland/pipewire files instead of shell wildcards
     const runtimeDir = process.env.XDG_RUNTIME_DIR || '/tmp'
     const dirs = [runtimeDir, '/tmp']
@@ -842,7 +828,7 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
 
             if (!Number.isNaN(pid) && pid > 0 && !seenPids.has(pid)) {
               seenPids.add(pid)
-              const procDetails = this.processTracker.getProcDetails(pid)
+              const procDetails = this.processTracker?.getProcDetails(pid)
               accesses.push({
                 devicePath: 'Wayland',
                 pid,
@@ -883,8 +869,6 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
       timestamp: number
     }> = []
 
-    if (!this.processTracker) return accesses
-
     try {
       const { stdout } = await execAsync('ps aux 2>/dev/null', {
         timeout: 2000,
@@ -923,7 +907,7 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
 
         if (!Number.isNaN(pid) && pid > 0 && !seenPids.has(pid)) {
           seenPids.add(pid)
-          const procDetails = this.processTracker.getProcDetails(pid)
+          const procDetails = this.processTracker?.getProcDetails(pid)
           accesses.push({
             devicePath: 'X11',
             pid,
