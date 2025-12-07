@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useState, useEffect, useRef } from 'react'
 import { Play, Pause } from 'lucide-react'
 import { Button } from './ui/button'
-// import Visualization from './Visualization'
+import Visualization from './Visualization'
 import { InterfaceOption } from '../types'
 import GlobalMap from './GlobalMap'
 import { ProcessList } from './ProcessList'
@@ -87,7 +87,9 @@ export function BasicNetworkMonitor(): React.JSX.Element {
         {/* The user wants "Map" too. I don't have a map component yet. */}
         {/* I'll put AppInsights on the right side as a summary, and Packet List on the left as main feed. */}
 
-        <div className="md:col-span-3 flex flex-col min-h-0">{/* <Visualization /> */}</div>
+        <div className="md:col-span-3 flex flex-col min-h-0">
+          <Visualization />
+        </div>
       </div>
     </div>
   )

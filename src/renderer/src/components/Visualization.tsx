@@ -9,9 +9,9 @@ function Visualization(): React.JSX.Element {
   const pieChartRef = useRef<HTMLCanvasElement>(null!)
   const chartInstance = useRef<Chart>(null!)
   const pieChartInstance = useRef<Chart>(null!)
-  const registryHistory = useRef<Array<Map<string, GlobalRegistry>>>(
-    new Array<Map<string, GlobalRegistry>>()
-  )
+  // const registryHistory = useRef<Array<Map<string, GlobalRegistry>>>(
+  //   new Array<Map<string, GlobalRegistry>>()
+  // )
 
   useEffect(() => {
     if (!chartRef.current) return

@@ -9,10 +9,7 @@ function GlobalMap(): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>
   const [registries, setRegistries] = useState<Map<string, ApplicationRegistry>>(new Map())
   const [location, setLocation] = useState({ lat: 0, lon: 0 })
-  // const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const projection = d3.geoMercator().center([-40, 30])
-  // .scale(dimensions.width / 2 / Math.PI)
-  // .translate([dimensions.width / 2, dimensions.height / 2])
   const geoPathGenerator = d3.geoPath().projection(projection)
   const backgroundMapSvgElements = data.features
     .filter((shape) => shape.id !== 'ATA')
@@ -28,24 +25,6 @@ function GlobalMap(): React.JSX.Element {
         />
       )
     })
-  // useEffect(() => {
-  //   const updateDimensions = (): void => {
-  //     if (containerRef.current) {
-  //       setDimensions({
-  //         width: containerRef.current.offsetWidth,
-  //         height: containerRef.current.offsetHeight
-  //       })
-  //     }
-  //   }
-
-  //   updateDimensions() // Initial measurement
-
-  //   window.addEventListener('resize', updateDimensions)
-
-  //   return () => {
-  //     window.removeEventListener('resize', updateDimensions)
-  //   }
-  // }, [])
   useEffect(() => {
     window.api.getPublicIP().then((publicIp) => {
       window.api.getGeoLocation(publicIp).then((loc) => {
@@ -55,7 +34,7 @@ function GlobalMap(): React.JSX.Element {
   }, [])
   useEffect(() => {
     window.api.onApplicationRegistryData((data: Map<string, ApplicationRegistry>) => {
-      const svg = d3.select('#mySvg') // Select your SVG container
+      const svg = d3.select('#mySvg')
       setRegistries(data)
       Array.from(registries.values()).forEach((registry) => {
         registry.geoLocations.forEach((loc) => {
@@ -82,10 +61,10 @@ function GlobalMap(): React.JSX.Element {
           path
             .attr('stroke-dasharray', totalLength + ' ' + totalLength)
             .attr('stroke-dashoffset', totalLength)
-            .transition() // Start the transition
-            .duration(2000) // Animation duration in ms
-            .ease(d3.easeLinear) // Use a linear easing for a consistent speed
-            .attr('stroke-dashoffset', 0) // Animate the offset to 0
+            .transition()
+            .duration(2000)
+            .ease(d3.easeLinear)
+            .attr('stroke-dashoffset', 0)
         })
       })
     })
