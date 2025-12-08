@@ -4,6 +4,7 @@ import type { ISystemMonitor } from './base-system-monitor'
 import { TCCMonitor } from './darwin-tcc-monitor'
 import { WindowsSystemMonitor } from './windows-system-monitor'
 import { LinuxSystemMonitor } from './linux-system-monitor'
+import type { ProcessTracker } from '../network/process-tracker'
 
 /**
  * System Monitor Factory
@@ -13,12 +14,16 @@ import { LinuxSystemMonitor } from './linux-system-monitor'
  *
  * - macOS (Darwin): TCC Monitor - monitors system TCC logs
  * - Windows: Windows System Monitor - monitors Event Logs (stub for now)
- * - Linux: Linux System Monitor - monitors D-Bus/Portals (stub for now)
+ * - Linux: Linux System Monitor - monitors hardware device access
  *
  * @param window - The main BrowserWindow for sending events to renderer
+ * @param processTracker - Optional shared ProcessTracker instance (for Linux)
  * @returns Platform-specific system monitor implementation
  */
-export function createSystemMonitor(window: BrowserWindow): ISystemMonitor {
+export function createSystemMonitor(
+  window: BrowserWindow,
+  processTracker?: ProcessTracker
+): ISystemMonitor {
   const platform = process.platform
 
   logger.info(`Creating system monitor for platform: ${platform}`)
@@ -33,8 +38,8 @@ export function createSystemMonitor(window: BrowserWindow): ISystemMonitor {
       return new WindowsSystemMonitor(window)
 
     case 'linux':
-      logger.info('Using Linux System Monitor (stub implementation)')
-      return new LinuxSystemMonitor(window)
+      logger.info('Using Linux System Monitor')
+      return new LinuxSystemMonitor(window, processTracker)
 
     default:
       logger.warn(`Unsupported platform: ${platform}. Using macOS TCC Monitor as fallback.`)
@@ -46,5 +51,5 @@ export function createSystemMonitor(window: BrowserWindow): ISystemMonitor {
  * Check if system monitoring is supported on the current platform
  */
 export function isSystemMonitoringSupported(): boolean {
-  return process.platform === 'darwin' // Only macOS is fully implemented
+  return process.platform === 'darwin' || process.platform === 'linux'
 }

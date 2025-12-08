@@ -15,15 +15,18 @@ import {
   updateAnalyzerInterfaces,
   queryDatabase
 } from './analyzer-runner'
+import { ProcessTracker } from '@main/core/network/process-tracker'
 import { registerAppLifecycleHandlers, registerProcessSignalHandlers } from './lifecycle'
 import {
   createSystemMonitor,
   isSystemMonitoringSupported
 } from '@core/system/system-monitor-factory'
 import type { ISystemMonitor } from '@core/system/base-system-monitor'
+import { setSharedProcessTracker } from './analyzer-runner'
 
 let ipcHandlersRegistered = false
 let systemMonitor: ISystemMonitor | null = null
+let sharedProcessTracker: ProcessTracker | null = null
 
 export async function startApp(): Promise<void> {
   registerProcessSignalHandlers()
@@ -33,33 +36,8 @@ export async function startApp(): Promise<void> {
   electronApp.setAppUserModelId('com.privacyradar')
   registerAppLifecycleHandlers(createMainWindow)
 
-  try {
-    logger.info('Running database migrations')
-    runMigrations()
-    logger.info('Migrations completed successfully')
-  } catch (error) {
-    logger.error('Failed to run migrations', error)
-  }
-
-  try {
-    getDatabase()
-    logger.info('Database initialized successfully')
-  } catch (error) {
-    logger.error('Failed to initialize database', error)
-  }
-
-  const mainWindow = createMainWindow()
-  setMainWindow(mainWindow)
-
-  // Initialize System Monitor (platform-specific)
-  systemMonitor = createSystemMonitor(mainWindow)
-
-  if (!isSystemMonitoringSupported()) {
-    logger.warn(
-      'System monitoring is not fully supported on this platform. Some features may be limited.'
-    )
-  }
-
+  // Register IPC handlers BEFORE creating the window to avoid race conditions
+  // The renderer may call these handlers immediately on mount
   if (!ipcHandlersRegistered) {
     const userDataPath = app.getPath('userData')
     const filePath = path.join(userDataPath, 'values.json')
@@ -141,10 +119,54 @@ export async function startApp(): Promise<void> {
 
     ipcHandlersRegistered = true
   }
+
+  try {
+    logger.info('Running database migrations')
+    runMigrations()
+    logger.info('Migrations completed successfully')
+  } catch (error) {
+    logger.error('Failed to run migrations', error)
+  }
+
+  try {
+    getDatabase()
+    logger.info('Database initialized successfully')
+  } catch (error) {
+    logger.error('Failed to initialize database', error)
+  }
+
+  const mainWindow = createMainWindow()
+  setMainWindow(mainWindow)
+
+  // Create shared ProcessTracker for Linux (used by both NetworkAnalyzer and LinuxSystemMonitor)
+  // This avoids duplicate polling and process caching
+  if (process.platform === 'linux') {
+    sharedProcessTracker = new ProcessTracker()
+    setSharedProcessTracker(sharedProcessTracker)
+    logger.info('Created shared ProcessTracker for Linux')
+  }
+
+  // Initialize System Monitor (platform-specific)
+  // Pass shared ProcessTracker to Linux monitor
+  systemMonitor = createSystemMonitor(mainWindow, sharedProcessTracker || undefined)
+
+  if (!isSystemMonitoringSupported()) {
+    logger.warn(
+      'System monitoring is not fully supported on this platform. Some features may be limited.'
+    )
+  } else {
+    try {
+      await systemMonitor.start()
+      logger.info('System monitor started')
+    } catch (error) {
+      logger.warn('Failed to start system monitor', error)
+    }
+  }
 }
 
 export function shutdownApp(): void {
   stopAnalyzer()
   systemMonitor?.stop()
+  systemMonitor = null
   app.quit()
 }
