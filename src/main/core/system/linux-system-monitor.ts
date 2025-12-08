@@ -1,4 +1,4 @@
-import { exec, execSync } from 'child_process'
+import { exec, execSync, execFile } from 'child_process'
 import { promisify } from 'util'
 import { existsSync, readdirSync, readlinkSync } from 'fs'
 import { BrowserWindow } from 'electron'
@@ -8,6 +8,7 @@ import { BaseSystemMonitor } from './base-system-monitor'
 import { ProcessTracker } from '../network/process-tracker'
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 // System processes that should be ignored (they have permissions but aren't user apps)
 // These are legitimate system services that need hardware access to function
@@ -500,6 +501,55 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
     }
   }
 
+  /**
+   * Validates and sanitizes a device path to prevent command injection
+   * @param devicePath The device path to validate
+   * @returns true if the path is safe to use, false otherwise
+   */
+  private isValidDevicePath(devicePath: string): boolean {
+    // More restrictive validation - only allow device paths
+    if (!/^\/dev\/[\w/\-.]+$/.test(devicePath) || devicePath.includes('..')) {
+      return false
+    }
+
+    // Additional check: ensure path is absolute and doesn't contain shell metacharacters
+    if (!devicePath.startsWith('/dev/') || /[;&|`$(){}[\]]/.test(devicePath)) {
+      return false
+    }
+
+    return true
+  }
+
+  /**
+   * Validates a file path to prevent command injection
+   * More permissive than device path validation - allows paths outside /dev
+   * @param filePath The file path to validate
+   * @returns true if the path is safe to use, false otherwise
+   */
+  private isValidFilePath(filePath: string): boolean {
+    // Must be absolute path
+    if (!filePath.startsWith('/')) {
+      return false
+    }
+
+    // No directory traversal
+    if (filePath.includes('..')) {
+      return false
+    }
+
+    // No shell metacharacters
+    if (/[;&|`$(){}[\]]/.test(filePath)) {
+      return false
+    }
+
+    // Allow alphanumeric, slashes, dots, hyphens, underscores
+    if (!/^\/[\w/\-\.]+$/.test(filePath)) {
+      return false
+    }
+
+    return true
+  }
+
   private findVideoDevices(): string[] {
     const devices: string[] = []
     for (let i = 0; i < 10; i++) {
@@ -561,6 +611,73 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
     return devices
   }
 
+  /**
+   * Check device access using lsof command (safer execution)
+   * @param devicePath The device path to check
+   * @returns Array of access records or null if no access found
+   */
+  private async checkDeviceAccessViaLsof(devicePath: string): Promise<Array<{
+    procName?: string
+    pid?: number
+    devicePath: string
+    timestamp: number
+  }> | null> {
+    if (!this.hasCommand('lsof')) {
+      return null
+    }
+
+    try {
+      // Use execFile to avoid shell interpretation - pass devicePath as argument
+      const { stdout } = await execFileAsync(
+        'lsof',
+        [devicePath],
+        {
+          timeout: LinuxSystemMonitor.LSOF_TIMEOUT_MS,
+          maxBuffer: 1024 * 1024
+        }
+      )
+
+      const lines = stdout.trim().split('\n').slice(1)
+      if (lines.length > 0 && lines[0].trim() !== '') {
+        const accesses: Array<{
+          procName?: string
+          pid?: number
+          devicePath: string
+          timestamp: number
+        }> = []
+
+        for (const line of lines) {
+          const parts = line.trim().split(/\s+/)
+          if (parts.length < 2) continue
+
+          const procName = parts[0]
+          const pidStr = parts[1]
+
+          const pid = Number.parseInt(pidStr, 10)
+          if (Number.isNaN(pid) || pid <= 0) continue
+
+          const procDetails = this.processTracker?.getProcDetails(pid)
+          const resolvedProcName = procDetails?.name || procName
+
+          accesses.push({
+            devicePath,
+            pid,
+            procName: resolvedProcName,
+            timestamp: Date.now()
+          })
+        }
+
+        if (accesses.length > 0) {
+          return accesses
+        }
+      }
+    } catch {
+      // Fall through to /proc fallback
+    }
+
+    return null
+  }
+
   private async checkDeviceAccess(
     devicePath: string,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -571,65 +688,16 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
     devicePath: string
     timestamp: number
   }> | null> {
-    // More restrictive validation - only allow device paths
-    if (!/^\/dev\/[\w/\-.]+$/.test(devicePath) || devicePath.includes('..')) {
+    // Validate device path before processing
+    if (!this.isValidDevicePath(devicePath)) {
       logger.debug(`Invalid device path format: ${devicePath}`)
       return null
     }
 
-    // Additional check: ensure path is absolute and doesn't contain shell metacharacters
-    if (!devicePath.startsWith('/dev/') || /[;&|`$(){}[\]]/.test(devicePath)) {
-      logger.debug(`Invalid device path format: ${devicePath}`)
-      return null
-    }
-
-    if (this.hasCommand('lsof')) {
-      try {
-        const { stdout } = await execAsync(
-          `lsof "${devicePath.replace(/"/g, '\\"')}" 2>/dev/null`,
-          {
-            timeout: LinuxSystemMonitor.LSOF_TIMEOUT_MS,
-            maxBuffer: 1024 * 1024
-          }
-        )
-
-        const lines = stdout.trim().split('\n').slice(1)
-        if (lines.length > 0 && lines[0].trim() !== '') {
-          const accesses: Array<{
-            procName?: string
-            pid?: number
-            devicePath: string
-            timestamp: number
-          }> = []
-
-          for (const line of lines) {
-            const parts = line.trim().split(/\s+/)
-            if (parts.length < 2) continue
-
-            const procName = parts[0]
-            const pidStr = parts[1]
-
-            const pid = Number.parseInt(pidStr, 10)
-            if (Number.isNaN(pid) || pid <= 0) continue
-
-            const procDetails = this.processTracker?.getProcDetails(pid)
-            const resolvedProcName = procDetails?.name || procName
-
-            accesses.push({
-              devicePath,
-              pid,
-              procName: resolvedProcName,
-              timestamp: Date.now()
-            })
-          }
-
-          if (accesses.length > 0) {
-            return accesses
-          }
-        }
-      } catch {
-        // Fall through to /proc fallback
-      }
+    // Try lsof first, fallback to /proc method
+    const lsofResult = await this.checkDeviceAccessViaLsof(devicePath)
+    if (lsofResult) {
+      return lsofResult
     }
 
     return this.checkDeviceAccessViaProc(devicePath)
@@ -823,11 +891,17 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
     const seenPids = new Set<number>()
 
     for (const filePath of waylandFiles) {
+      // Validate file path before using it
+      if (!this.isValidFilePath(filePath)) {
+        continue
+      }
+
       if (this.hasCommand('lsof')) {
         try {
-          // Use shell: false and pass file path directly (no wildcards)
-          const { stdout } = await execAsync(
-            `lsof "${filePath.replace(/"/g, '\\"')}" 2>/dev/null`,
+          // Use execFile to avoid shell interpretation - pass file path as argument
+          const { stdout } = await execFileAsync(
+            'lsof',
+            [filePath],
             {
               timeout: LinuxSystemMonitor.LSOF_TIMEOUT_MS,
               maxBuffer: 1024 * 1024
