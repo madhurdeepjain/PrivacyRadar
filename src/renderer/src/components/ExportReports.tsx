@@ -75,11 +75,7 @@ function ExportReports({ darkMode }: { darkMode: boolean }): React.JSX.Element {
             ></textarea>
           </div>
           <div className="flex items-center justify-end px-3 py-3 border-t border-default-medium">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => exportReports(inputValue)}
-            >
+            <Button variant="outline" size="sm" onClick={() => exportReports(inputValue)}>
               <Download className="mr-2 h-4 w-4" />
               Export
             </Button>

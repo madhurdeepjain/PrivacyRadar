@@ -19,12 +19,9 @@ export function Dialog({ open, onOpenChange, children }: DialogProps): React.JSX
     >
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" />
-      
+
       {/* Dialog Content */}
-      <div
-        className="relative z-50 w-full max-w-md mx-4"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="relative z-50 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
         {children}
       </div>
     </div>
@@ -35,7 +32,11 @@ interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode
 }
 
-export function DialogContent({ children, className, ...props }: DialogContentProps): React.JSX.Element {
+export function DialogContent({
+  children,
+  className,
+  ...props
+}: DialogContentProps): React.JSX.Element {
   return (
     <div
       className={cn(
@@ -53,7 +54,11 @@ interface DialogHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode
 }
 
-export function DialogHeader({ children, className, ...props }: DialogHeaderProps): React.JSX.Element {
+export function DialogHeader({
+  children,
+  className,
+  ...props
+}: DialogHeaderProps): React.JSX.Element {
   return (
     <div className={cn('flex flex-col space-y-1.5 p-6 pb-4', className)} {...props}>
       {children}
@@ -65,7 +70,11 @@ interface DialogTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {
   children: React.ReactNode
 }
 
-export function DialogTitle({ children, className, ...props }: DialogTitleProps): React.JSX.Element {
+export function DialogTitle({
+  children,
+  className,
+  ...props
+}: DialogTitleProps): React.JSX.Element {
   return (
     <h2 className={cn('text-lg font-semibold leading-none tracking-tight', className)} {...props}>
       {children}
@@ -90,4 +99,3 @@ export function DialogClose({ onClose }: DialogCloseProps): React.JSX.Element {
     </Button>
   )
 }
-

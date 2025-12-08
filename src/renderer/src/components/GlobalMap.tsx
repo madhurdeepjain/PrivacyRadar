@@ -79,7 +79,10 @@ function GlobalMap({
           Global Traffic
         </CardTitle>
       </CardHeader>
-      <CardContent ref={containerRef} className="flex-1 overflow-hidden pr-2 flex items-center justify-center">
+      <CardContent
+        ref={containerRef}
+        className="flex-1 overflow-hidden pr-2 flex items-center justify-center"
+      >
         <svg
           id="mySvg"
           width="100%"
