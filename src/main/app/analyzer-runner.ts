@@ -8,6 +8,7 @@ import {
 import { logger } from '@infra/logging'
 import { NetworkAnalyzer } from '@main/core/network/network-analyzer'
 import { PacketWriter } from '@main/core/network/packet-writer'
+import { ProcessTracker } from '@main/core/network/process-tracker'
 import { getDeviceInfo } from '@shared/utils/device-info'
 import { setBestInterfaceInfo } from '@shared/utils/interface-utils'
 import { isDevelopment } from '@shared/utils/environment'
@@ -19,6 +20,11 @@ import { getDatabasePaths } from '../infrastructure/db/utils'
 import Database from 'better-sqlite3'
 
 let analyzer: NetworkAnalyzer | null = null
+let sharedProcessTracker: ProcessTracker | null = null
+
+export function setSharedProcessTracker(tracker: ProcessTracker): void {
+  sharedProcessTracker = tracker
+}
 let writer: PacketWriter | null = null
 let registryRepository: RegistryRepository | null = null
 let snapshotInterval: NodeJS.Timeout | null = null
@@ -203,7 +209,8 @@ export async function startAnalyzer(interfaceNames?: string | string[]): Promise
         writer?.writePacket(pkt)
       }
       sendDataToFrontend(pkt)
-    }
+    },
+    sharedProcessTracker || undefined
   )
 
   try {
