@@ -138,8 +138,8 @@ export function Sidebar({
             {/* Theme Toggle */}
             <div className="space-y-3">
               <label className="text-sm font-medium">Theme</label>
-              <label className="themeSwitcherTwo relative inline-flex cursor-pointer select-none items-center w-full justify-between">
-                <span className="text-sm">Light</span>
+              <label className="themeSwitcherTwo relative flex cursor-pointer select-none items-center w-full">
+                <span className="text-sm w-20 text-left">Light</span>
                 <input
                   type="checkbox"
                   checked={darkMode}
@@ -147,7 +147,7 @@ export function Sidebar({
                   className="sr-only"
                 />
                 <span
-                  className={`slider mx-4 flex h-8 w-[60px] items-center rounded-full p-1 duration-200 ${
+                  className={`slider mx-4 flex h-8 w-[60px] items-center rounded-full p-1 duration-200 flex-shrink-0 ${
                     darkMode ? 'bg-[#212b36]' : 'bg-[#CCCCCE]'
                   }`}
                 >
@@ -157,15 +157,15 @@ export function Sidebar({
                     }`}
                   ></span>
                 </span>
-                <span className="text-sm">Dark</span>
+                <span className="text-sm w-20 text-right">Dark</span>
               </label>
             </div>
 
             {/* Mode Toggle */}
             <div className="space-y-3">
               <label className="text-sm font-medium">Display Mode</label>
-              <label className="themeSwitcherTwo relative inline-flex cursor-pointer select-none items-center w-full justify-between">
-                <span className="text-sm">Basic</span>
+              <label className="themeSwitcherTwo relative flex cursor-pointer select-none items-center w-full">
+                <span className="text-sm w-20 text-left">Basic</span>
                 <input
                   type="checkbox"
                   checked={advancedMode}
@@ -173,7 +173,7 @@ export function Sidebar({
                   className="sr-only"
                 />
                 <span
-                  className={`slider mx-4 flex h-8 w-[60px] items-center rounded-full p-1 duration-200 ${
+                  className={`slider mx-4 flex h-8 w-[60px] items-center rounded-full p-1 duration-200 flex-shrink-0 ${
                     advancedMode ? 'bg-[#212b36]' : 'bg-[#CCCCCE]'
                   }`}
                 >
@@ -183,15 +183,15 @@ export function Sidebar({
                     }`}
                   ></span>
                 </span>
-                <span className="text-sm">Advanced</span>
+                <span className="text-sm w-20 text-right">Advanced</span>
               </label>
             </div>
 
             {/* Color Accessibility Toggle */}
             <div className="space-y-3">
               <label className="text-sm font-medium">Color Accessibility</label>
-              <label className="themeSwitcherTwo relative inline-flex cursor-pointer select-none items-center w-full justify-between">
-                <span className="text-sm">Color</span>
+              <label className="themeSwitcherTwo relative flex cursor-pointer select-none items-center w-full">
+                <span className="text-sm w-20 text-left">Color</span>
                 <input
                   type="checkbox"
                   checked={colorAccessibility}
@@ -199,7 +199,7 @@ export function Sidebar({
                   className="sr-only"
                 />
                 <span
-                  className={`slider mx-4 flex h-8 w-[60px] items-center rounded-full p-1 duration-200 ${
+                  className={`slider mx-4 flex h-8 w-[60px] items-center rounded-full p-1 duration-200 flex-shrink-0 ${
                     colorAccessibility ? 'bg-[#212b36]' : 'bg-[#CCCCCE]'
                   }`}
                 >
@@ -209,7 +209,7 @@ export function Sidebar({
                     }`}
                   ></span>
                 </span>
-                <span className="text-sm">Accessible</span>
+                <span className="text-sm w-20 text-right">Accessible</span>
               </label>
             </div>
 

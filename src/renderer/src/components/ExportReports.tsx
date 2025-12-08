@@ -74,13 +74,13 @@ function ExportReports({ darkMode }: { darkMode: boolean }): React.JSX.Element {
               onChange={(e) => setInputValue(e.target.value)}
             ></textarea>
           </div>
-          <div className="flex items-center px-3 py-2 border-t border-default-medium">
+          <div className="flex items-center justify-end px-3 py-3 border-t border-default-medium">
             <Button
-              variant="ghost"
-              size="lg"
+              variant="outline"
+              size="sm"
               onClick={() => exportReports(inputValue)}
-              className="h-8 text-lg"
             >
+              <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
           </div>

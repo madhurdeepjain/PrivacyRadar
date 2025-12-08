@@ -16,7 +16,9 @@ function GlobalMap({
 }): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>
 
-  const projection = d3.geoMercator().center([-40, 30])
+  // Create projection that centers the map better - centered on 0 longitude, 20 latitude
+  // Scale adjusted to show a good view of the world
+  const projection = d3.geoMercator().center([0, 20]).scale(180)
   const geoPathGenerator = d3.geoPath().projection(projection)
   const backgroundMapSvgElements = data.features
     .filter((shape) => shape.id !== 'ATA')
@@ -77,8 +79,15 @@ function GlobalMap({
           Global Traffic
         </CardTitle>
       </CardHeader>
-      <CardContent ref={containerRef} className="flex-1 overflow-auto no-scrollbar pr-2">
-        <svg id="mySvg" width="100%" height="100%" style={{ backgroundRepeat: 'repeat-y' }}>
+      <CardContent ref={containerRef} className="flex-1 overflow-hidden pr-2 flex items-center justify-center">
+        <svg
+          id="mySvg"
+          width="100%"
+          height="100%"
+          style={{ backgroundRepeat: 'repeat-y' }}
+          viewBox="0 0 1000 500"
+          preserveAspectRatio="xMidYMid meet"
+        >
           {backgroundMapSvgElements}
         </svg>
       </CardContent>
