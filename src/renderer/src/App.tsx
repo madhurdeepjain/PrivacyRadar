@@ -65,6 +65,14 @@ function App(): React.JSX.Element {
         setMaxPackets(500)
       }
     })
+    console.log('Loading color accessibility setting...')
+    window.api.getValue('colorAccessibility').then((value) => {
+      if (value === 'true') {
+        setColorAccessibility(true)
+      } else {
+        setColorAccessibility(false)
+      }
+    })
     console.log('Settings loaded.')
   }, [])
   useEffect(() => {
