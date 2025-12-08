@@ -543,7 +543,7 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
     }
 
     // Allow alphanumeric, slashes, dots, hyphens, underscores
-    if (!/^\/[\w/\-\.]+$/.test(filePath)) {
+    if (!/^\/[\w/\-.]+$/.test(filePath)) {
       return false
     }
 
