@@ -1,161 +1,52 @@
 import * as React from 'react'
-import { useState, useEffect, useMemo, useRef } from 'react'
-import { Activity, Database, Globe, Play, Pause, Settings2 } from 'lucide-react'
+import { Activity, Database, Globe, Play, Pause, Settings2, Baby } from 'lucide-react'
+import { useState, useMemo } from 'react'
 import { Button } from './ui/button'
 import { StatCard } from './StatCard'
 import { InterfaceSelector } from './InterfaceSelector'
 // import { AppInsights } from './AppInsights'
 import { ActivityList } from './ActivityList'
-import { PacketMetadata, AppStats, InterfaceOption } from '../types'
 import ExportReports from './ExportReports'
 import { AppInsights } from './AppInsights'
+import { AppStats, InterfaceOption } from '@renderer/types'
+import { PacketMetadata } from '../types'
 
-export function AdvancedNetworkMonitor({ darkMode }: { darkMode: boolean }): React.JSX.Element {
-  // State
-  const [packets, setPackets] = useState<PacketMetadata[]>([])
-  const [packetCount, setPacketCount] = useState(0)
-  const [totalBytes, setTotalBytes] = useState(0)
-  const [appStatsMap, setAppStatsMap] = useState<Record<string, AppStats>>({})
-  const [bytesPerSecond, setBytesPerSecond] = useState(0)
-  const throughputSamplesRef = useRef<Array<{ timestamp: number; size: number }>>([])
-
-  const [isCapturing, setIsCapturing] = useState(false)
-  const [isUpdatingCapture, setIsUpdatingCapture] = useState(false)
-
-  const [interfaces, setInterfaces] = useState<InterfaceOption[]>([])
-  const [selectedInterfaces, setSelectedInterfaces] = useState<string[]>([])
+export function AdvancedNetworkMonitor({
+  handleAdvancedModeChange,
+  packets,
+  packetCount,
+  totalBytes,
+  bytesPerSecond,
+  selectedInterfaces,
+  darkMode,
+  isCapturing,
+  handleToggleCapture,
+  isUpdatingCapture,
+  setSelectedInterfaces,
+  setInterfaces,
+  setIsCapturing,
+  appStatsMap,
+  interfaces
+}: {
+  handleAdvancedModeChange: () => void
+  packetCount: number
+  totalBytes: number
+  bytesPerSecond: number
+  selectedInterfaces: string[]
+  darkMode: boolean
+  isCapturing: boolean
+  handleToggleCapture: () => void
+  isUpdatingCapture: boolean
+  setSelectedInterfaces: React.Dispatch<React.SetStateAction<string[]>>
+  setInterfaces: React.Dispatch<React.SetStateAction<InterfaceOption[]>>
+  setIsCapturing: React.Dispatch<React.SetStateAction<boolean>>
+  setAppStatsMap: React.Dispatch<React.SetStateAction<Record<string, AppStats>>>
+  appStatsMap: Record<string, AppStats>
+  interfaces: InterfaceOption[]
+  packets: PacketMetadata[]
+}): React.JSX.Element {
   const [isSwitchingInterface, setIsSwitchingInterface] = useState(false)
-
   const [showSettings, setShowSettings] = useState(false)
-
-  // Derived State
-  const appStats = useMemo(() => {
-    return Object.values(appStatsMap).sort((a, b) => b.packetCount - a.packetCount)
-  }, [appStatsMap])
-
-  // API: Initialize Interfaces
-  useEffect(() => {
-    const init = async (): Promise<void> => {
-      try {
-        const result = await window.api.getNetworkInterfaces()
-        setInterfaces(result.interfaces)
-        setSelectedInterfaces(
-          result.selectedInterfaceNames.length > 0
-            ? result.selectedInterfaceNames
-            : result.interfaces.map((i) => i.name)
-        )
-        setIsCapturing(result.isCapturing)
-      } catch (err) {
-        console.error('Failed to load interfaces', err)
-      }
-    }
-    init()
-  }, [])
-
-  // API: Network Data Listener
-  useEffect(() => {
-    const handleData = (data: PacketMetadata): void => {
-      // Packets
-      setPacketCount((p) => p + 1)
-      setPackets((prev) => [data, ...prev].slice(0, 500))
-      setTotalBytes((p) => p + data.size)
-
-      // App Stats
-      setAppStatsMap((prev) => {
-        const appName = data.procName || 'UNKNOWN'
-        const key = `${appName}-${data.pid ?? 'N/A'}`
-        const existing = prev[key]
-
-        if (existing) {
-          return {
-            ...prev,
-            [key]: {
-              ...existing,
-              packetCount: existing.packetCount + 1,
-              totalBytes: existing.totalBytes + data.size,
-              lastSeen: Math.max(existing.lastSeen, data.timestamp)
-            }
-          }
-        }
-        return {
-          ...prev,
-          [key]: {
-            name: appName,
-            pid: data.pid,
-            packetCount: 1,
-            totalBytes: data.size,
-            lastSeen: data.timestamp
-          }
-        }
-      })
-
-      // Throughput
-      const now = data.timestamp
-      const samples = throughputSamplesRef.current
-      samples.push({ timestamp: now, size: data.size })
-
-      // Cleanup old samples (30s window)
-      const windowStart = now - 30000
-      while (samples.length > 0 && samples[0].timestamp < windowStart) {
-        samples.shift()
-      }
-
-      // Calculate rate
-      if (samples.length > 0) {
-        const recentBytes = samples.reduce((acc, s) => acc + s.size, 0)
-        const span = Math.max(1, (now - samples[0].timestamp) / 1000)
-        setBytesPerSecond(recentBytes / span)
-      } else {
-        setBytesPerSecond(0)
-      }
-    }
-
-    window.api.onNetworkData(handleData)
-    return () => {
-      window.api.removeNetworkDataListener()
-    }
-  }, [])
-
-  // Throughput Decay Interval
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const samples = throughputSamplesRef.current
-      if (samples.length === 0) {
-        setBytesPerSecond((b) => (b > 0 ? 0 : b))
-        return
-      }
-      const now = Date.now()
-      const windowStart = now - 30000
-      while (samples.length > 0 && samples[0].timestamp < windowStart) {
-        samples.shift()
-      }
-      if (samples.length === 0) {
-        setBytesPerSecond(0)
-      } else {
-        const recentBytes = samples.reduce((acc, s) => acc + s.size, 0)
-        const span = Math.max(1, (now - samples[0].timestamp) / 1000)
-        setBytesPerSecond(recentBytes / span)
-      }
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Actions
-  const handleToggleCapture = async (): Promise<void> => {
-    setIsUpdatingCapture(true)
-    try {
-      const result = isCapturing ? await window.api.stopCapture() : await window.api.startCapture()
-      setIsCapturing(result.isCapturing)
-      if (!result.isCapturing) {
-        setBytesPerSecond(0)
-        throughputSamplesRef.current = []
-      }
-    } catch (err) {
-      console.error('Capture toggle failed', err)
-    } finally {
-      setIsUpdatingCapture(false)
-    }
-  }
 
   const handleInterfaceChange = async (nextSelection: string[]): Promise<void> => {
     setIsSwitchingInterface(true)
@@ -170,7 +61,10 @@ export function AdvancedNetworkMonitor({ darkMode }: { darkMode: boolean }): Rea
       setIsSwitchingInterface(false)
     }
   }
-
+  // Derived State
+  const appStats = useMemo(() => {
+    return Object.values(appStatsMap).sort((a, b) => b.packetCount - a.packetCount)
+  }, [appStatsMap])
   // Formatters
   const formatRate = (bps: number): string => {
     if (bps < 1024) return `${bps.toFixed(0)} B/s`
@@ -201,6 +95,10 @@ export function AdvancedNetworkMonitor({ darkMode }: { darkMode: boolean }): Rea
           >
             <Settings2 className="mr-2 h-4 w-4" />
             Interfaces
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleAdvancedModeChange}>
+            <Baby className="mr-2 h-4 w-4" />
+            Basic Mode
           </Button>
           <Button
             onClick={handleToggleCapture}

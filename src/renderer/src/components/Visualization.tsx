@@ -1,22 +1,36 @@
 import { useEffect, useRef } from 'react'
 import Chart from 'chart.js/auto'
-import { GlobalRegistry } from 'src/main/shared/interfaces/common'
+import { PacketMetadata, ProcessRegistry } from 'src/main/shared/interfaces/common'
 import { CardContent, CardHeader, Card, CardTitle } from './ui/card'
 import { PieChart } from 'lucide-react'
 
-function Visualization(): React.JSX.Element {
+function Visualization({
+  colorAccessibility,
+  registries,
+  packets
+}: {
+  colorAccessibility: boolean
+  registries: Array<Map<string, ProcessRegistry>>
+  packets: Array<PacketMetadata>
+}): React.JSX.Element {
   const chartRef = useRef<HTMLCanvasElement>(null!)
   const pieChartRef = useRef<HTMLCanvasElement>(null!)
   const chartInstance = useRef<Chart>(null!)
   const pieChartInstance = useRef<Chart>(null!)
-  // const registryHistory = useRef<Array<Map<string, GlobalRegistry>>>(
-  //   new Array<Map<string, GlobalRegistry>>()
-  // )
+
+  function getCountByTimestamp(packets: Array<PacketMetadata>): Record<string, number> {
+    const countMap: Record<string, number> = {}
+    packets.forEach((packet) => {
+      countMap[packet.timestamp] = (countMap[packet.timestamp] || 0) + 1
+    })
+    return countMap
+  }
 
   useEffect(() => {
     if (!chartRef.current) return
     const ctx = chartRef.current.getContext('2d')
     if (!ctx) return
+    if (chartInstance.current) return
     chartInstance.current = new Chart(ctx, {
       type: 'line',
       data: {
@@ -26,8 +40,8 @@ function Visualization(): React.JSX.Element {
             label: 'Number of Packets',
             data: [],
             borderWidth: 1,
-            backgroundColor: 'green',
-            borderColor: 'green'
+            backgroundColor: colorAccessibility ? '#0C7BDC' : 'green',
+            borderColor: colorAccessibility ? '#0C7BDC' : 'green'
           }
         ]
       },
@@ -70,6 +84,7 @@ function Visualization(): React.JSX.Element {
     if (!pieChartRef.current) return
     const ctx2 = pieChartRef.current.getContext('2d')
     if (!ctx2) return
+    if (pieChartInstance.current) return
     pieChartInstance.current = new Chart(ctx2, {
       type: 'doughnut',
       data: {
@@ -77,7 +92,7 @@ function Visualization(): React.JSX.Element {
         datasets: [
           {
             data: [],
-            backgroundColor: []
+            backgroundColor: colorAccessibility ? ['#FFC20A', '#0C7BDC'] : ['green', 'red']
           }
         ]
       },
@@ -107,46 +122,41 @@ function Visualization(): React.JSX.Element {
         }
       }
     })
-  }, [])
+  }, [registries, colorAccessibility])
   useEffect(() => {
-    window.api.onGlobalRegistryData((data: Map<string, GlobalRegistry>) => {
-      console.log(data)
-      // if (data !== undefined) {
-      //   if (registryHistory.current.length === 0) {
-      //     chartInstance.current.data.datasets[0].data.push(
-      //       Array.from(data.values()).reduce((acc, registry) => acc + registry.totalPackets, 0)
-      //     )
-      //   } else {
-      //     chartInstance.current.data.datasets[0].data.push(
-      //       Array.from(data.values()).reduce((acc, registry) => acc + registry.totalPackets, 0) -
-      //         Array.from(
-      //           registryHistory.current[registryHistory.current.length - 1].values()
-      //         ).reduce((acc, registry) => acc + registry.totalPackets, 0)
-      //     )
-      //   }
-      //   const inboundSum = Array.from(data.values()).reduce(
-      //     (acc, registry) => acc + registry.inboundBytes,
-      //     0
-      //   )
-      //   const outboundSum = Array.from(data.values()).reduce(
-      //     (acc, registry) => acc + registry.outboundBytes,
-      //     0
-      //   )
-      //   pieChartInstance.current.data.datasets[0].data = [inboundSum, outboundSum]
-      //   pieChartInstance.current.data.labels = ['Inbound', 'Outbound']
-      //   pieChartInstance.current.data.datasets[0].backgroundColor = ['green', 'red']
-      //   chartInstance.current.data.labels?.push(new Date().toLocaleTimeString())
-      //   if (chartInstance.current.data.labels && chartInstance.current.data.labels.length > 25) {
-      //     chartInstance.current.data.labels.shift()
-      //     chartInstance.current.data.datasets[0].data.shift()
-      //     chartInstance.current.data.datasets[1].data.shift()
-      //   }
-      //   registryHistory.current.push(data)
-      //   pieChartInstance.current.update()
-      //   chartInstance.current.update()
-      // }
-    })
-  }, [])
+    if (!packets) return
+    const countByTimestamp = getCountByTimestamp(packets)
+    const inboundSum = Array.from(registries[registries.length - 1].values()).reduce(
+      (acc, registry) => acc + registry.inboundBytes,
+      0
+    )
+    const outboundSum = Array.from(registries[registries.length - 1].values()).reduce(
+      (acc, registry) => acc + registry.outboundBytes,
+      0
+    )
+    if (!chartInstance.current || !pieChartInstance.current) return
+    pieChartInstance.current.data.datasets[0].data = [inboundSum, outboundSum]
+    pieChartInstance.current.data.labels = ['Inbound', 'Outbound']
+    pieChartInstance.current.data.datasets[0].backgroundColor = ['green', 'red']
+    chartInstance.current.data.labels = Object.keys(countByTimestamp).reduce(
+      (acc: string[], timestamp) => {
+        const date = new Date(Number(timestamp))
+        acc.push(date.toLocaleTimeString())
+        return acc
+      },
+      []
+    )
+    pieChartInstance.current.data.datasets[0].backgroundColor = colorAccessibility
+      ? ['#0C7BDC', '#FFC20A']
+      : ['green', 'red']
+    chartInstance.current.data.datasets[0].backgroundColor = colorAccessibility
+      ? '#0C7BDC'
+      : 'green'
+    chartInstance.current.data.datasets[0].borderColor = colorAccessibility ? '#0C7BDC' : 'green'
+    chartInstance.current.data.datasets[0].data = Object.values(countByTimestamp)
+    pieChartInstance.current.update()
+    chartInstance.current.update()
+  }, [registries, packets, colorAccessibility])
 
   return (
     <Card className="h-full flex flex-col">

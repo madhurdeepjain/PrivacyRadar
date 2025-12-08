@@ -1,27 +1,25 @@
 import * as React from 'react'
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect } from 'react'
 import { Cpu } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Badge } from './ui/badge'
-import { ProcessRegistry } from 'src/main/shared/interfaces/common'
+import { ProcessRegistry } from '../types'
 
-export function ProcessList(): React.JSX.Element {
+export function ProcessList({
+  registries
+}: {
+  registries: Array<Map<string, ProcessRegistry>>
+}): React.JSX.Element {
   const listRef = useRef<HTMLDivElement>(null)
-  const [registries, setRegistries] = useState<Map<string, ProcessRegistry>>(new Map())
   useEffect(() => {
-    window.api.onProcessRegistryData((data: Map<string, ProcessRegistry>) => {
-      setRegistries(data)
-    })
-  }, [registries])
-  useEffect(() => {
-    if (listRef.current && registries.size > 0) {
+    if (listRef.current && registries[registries.length - 1].size > 0) {
       listRef.current.scrollTop = 0 // Newest at top
     }
-  }, [registries.size])
+  }, [registries])
 
   const formatTime = (timestamp: number): string => new Date(timestamp).toLocaleTimeString()
 
-  if (registries.size === 0) {
+  if (registries[registries.length - 1].size === 0) {
     return (
       <Card className="flex-1 flex flex-col min-h-0">
         <CardHeader>
@@ -45,7 +43,7 @@ export function ProcessList(): React.JSX.Element {
             Live Process Traffic
           </CardTitle>
           <Badge variant="outline" className="font-mono text-xs">
-            {registries.size} events
+            {registries[registries.length - 1].size} events
           </Badge>
         </div>
       </CardHeader>
@@ -79,7 +77,7 @@ export function ProcessList(): React.JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {Array.from(registries.values())
+                {Array.from(registries[registries.length - 1].values())
                   .sort((a, b) => b.totalPackets - a.totalPackets)
                   .map((registry, i) => (
                     <tr key={i} className="bg-neutral-primary border-b border-default">

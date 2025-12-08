@@ -8,10 +8,27 @@ function App(): React.JSX.Element {
   const [viewMode, setViewMode] = useState<'network' | 'system'>('network')
   const [advancedMode, setAdvancedMode] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
+  const [maxPackets, setMaxPackets] = useState(500)
+  const [colorAccessibility, setColorAccessibility] = useState(true)
+
+  function toggleColorAccessibility(): void {
+    setColorAccessibility(!colorAccessibility)
+    window.api.setValue('colorAccessibility', (!colorAccessibility).toString())
+  }
+
+  function handleMaxPacketsChange(value: number): void {
+    setMaxPackets(value)
+    window.api.setValue('maxPackets', value.toString())
+  }
 
   function handleViewModeChange(view: 'network' | 'system'): void {
     setViewMode(view)
     window.api.setValue('viewMode', view)
+  }
+
+  const handleAdvancedModeChange = (): void => {
+    setAdvancedMode(!advancedMode)
+    window.api.setValue('advancedMode', (!advancedMode).toString())
   }
   useEffect(() => {
     console.log('Loading settings...')
@@ -39,6 +56,15 @@ function App(): React.JSX.Element {
         setViewMode('network')
       }
     })
+    console.log('Loading max packets setting...')
+    window.api.getValue('maxPackets').then((value) => {
+      const parsedValue = parseInt(value, 10)
+      if (!isNaN(parsedValue)) {
+        setMaxPackets(parsedValue)
+      } else {
+        setMaxPackets(500)
+      }
+    })
     console.log('Settings loaded.')
   }, [])
   useEffect(() => {
@@ -52,12 +78,17 @@ function App(): React.JSX.Element {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground font-sans antialiased">
       <Sidebar
+        colorAccessibility={colorAccessibility}
+        toggleColorAccessibility={toggleColorAccessibility}
+        maxPackets={maxPackets}
+        handleMaxPacketsChange={handleMaxPacketsChange}
         currentView={viewMode}
         onViewChange={handleViewModeChange}
         advancedMode={advancedMode}
         setAdvancedMode={setAdvancedMode}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
+        handleAdvancedModeChange={handleAdvancedModeChange}
       />
       <main className="flex-1 flex flex-col overflow-hidden relative bg-muted/10">
         <AnimatePresence mode="wait">
@@ -70,7 +101,13 @@ function App(): React.JSX.Element {
             className="h-full flex flex-col overflow-hidden"
           >
             {viewMode === 'network' ? (
-              <NetworkMonitor advancedMode={advancedMode} darkMode={darkMode} />
+              <NetworkMonitor
+                colorAccessibility={colorAccessibility}
+                handleAdvancedModeChange={handleAdvancedModeChange}
+                advancedMode={advancedMode}
+                darkMode={darkMode}
+                maxPackets={maxPackets}
+              />
             ) : (
               <SystemMonitor />
             )}

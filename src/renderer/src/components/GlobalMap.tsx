@@ -1,14 +1,21 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import * as d3 from 'd3'
 import { CardContent, CardHeader, Card, CardTitle } from './ui/card'
-import type { ApplicationRegistry } from '../../../main/shared/interfaces/common'
+import type { ProcessRegistry } from '../../../main/shared/interfaces/common'
 import { data } from '../lib/data'
 import { Earth } from 'lucide-react'
 
-function GlobalMap(): React.JSX.Element {
+function GlobalMap({
+  colorAccessibility,
+  registries,
+  location
+}: {
+  colorAccessibility: boolean
+  registries: Array<Map<string, ProcessRegistry>>
+  location: { lat: number; lon: number } | null
+}): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null) as React.RefObject<HTMLDivElement>
-  const [registries, setRegistries] = useState<Map<string, ApplicationRegistry>>(new Map())
-  const [location, setLocation] = useState({ lat: 0, lon: 0 })
+
   const projection = d3.geoMercator().center([-40, 30])
   const geoPathGenerator = d3.geoPath().projection(projection)
   const backgroundMapSvgElements = data.features
@@ -25,50 +32,43 @@ function GlobalMap(): React.JSX.Element {
         />
       )
     })
-  useEffect(() => {
-    window.api.getPublicIP().then((publicIp) => {
-      window.api.getGeoLocation(publicIp).then((loc) => {
-        setLocation(loc)
-      })
-    })
-  }, [])
-  useEffect(() => {
-    window.api.onApplicationRegistryData((data: Map<string, ApplicationRegistry>) => {
-      const svg = d3.select('#mySvg')
-      setRegistries(data)
-      Array.from(registries.values()).forEach((registry) => {
-        registry.geoLocations.forEach((loc) => {
-          const path = svg
-            .append('path')
-            .attr('class', 'my-path')
-            .attr(
-              'd',
-              geoPathGenerator({
-                type: 'LineString',
-                coordinates: [
-                  [loc.lon, loc.lat],
-                  [location.lon, location.lat]
-                ]
-              })
-            )
-            .attr('stroke', 'red')
-            .attr('strokeWidth', 3)
-            .attr('fill', 'none')
-          // Measure the length of the drawn path
-          const totalLength = path.node().getTotalLength()
 
-          // Set up the animation
-          path
-            .attr('stroke-dasharray', totalLength + ' ' + totalLength)
-            .attr('stroke-dashoffset', totalLength)
-            .transition()
-            .duration(2000)
-            .ease(d3.easeLinear)
-            .attr('stroke-dashoffset', 0)
-        })
+  useEffect(() => {
+    if (!location) return
+    const svg = d3.select('#mySvg')
+    Array.from(registries[registries.length - 1].values()).forEach((registry) => {
+      registry.geoLocations.forEach((loc) => {
+        const path = svg
+          .append('path')
+          .attr('class', 'my-path')
+          .attr(
+            'd',
+            geoPathGenerator({
+              type: 'LineString',
+              coordinates: [
+                [loc.lon, loc.lat],
+                [location.lon, location.lat]
+              ]
+            })
+          )
+          .attr('stroke', colorAccessibility ? '#FFC20A' : 'red')
+          .attr('strokeWidth', 3)
+          .attr('fill', 'none')
+        // Measure the length of the drawn path
+        if (!path.node()) return
+        const totalLength = path.node()!.getTotalLength()
+
+        // Set up the animation
+        path
+          .attr('stroke-dasharray', totalLength + ' ' + totalLength)
+          .attr('stroke-dashoffset', totalLength)
+          .transition()
+          .duration(2000)
+          .ease(d3.easeLinear)
+          .attr('stroke-dashoffset', 0)
       })
     })
-  }, [registries, geoPathGenerator, location, setRegistries, setLocation])
+  }, [registries, geoPathGenerator, location, colorAccessibility])
   return (
     <Card className="h-1/2 flex flex-col gap-4">
       <CardHeader className="pb-3">

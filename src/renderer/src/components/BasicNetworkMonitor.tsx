@@ -1,58 +1,48 @@
 import * as React from 'react'
-import { useState, useEffect, useRef } from 'react'
-import { Play, Pause } from 'lucide-react'
+import { Play, Pause, Zap } from 'lucide-react'
 import { Button } from './ui/button'
 import Visualization from './Visualization'
-import { InterfaceOption } from '../types'
+import { InterfaceOption, ProcessRegistry } from '../types'
 import GlobalMap from './GlobalMap'
 import { ProcessList } from './ProcessList'
+import { PacketMetadata } from 'src/preload/preload'
 
-export function BasicNetworkMonitor(): React.JSX.Element {
-  // State
-  const throughputSamplesRef = useRef<Array<{ timestamp: number; size: number }>>([])
-  const [isCapturing, setIsCapturing] = useState(false)
-  const [isUpdatingCapture, setIsUpdatingCapture] = useState(false)
-  const [interfaces, setInterfaces] = useState<InterfaceOption[]>([])
+interface BasicNetworkMonitorProps {
+  colorAccessibility: boolean
+  handleAdvancedModeChange: () => void
+  packets: Array<PacketMetadata>
+  location: { lat: number; lon: number } | null
+  registries: Array<Map<string, ProcessRegistry>>
+  handleToggleCapture: () => void
+  isUpdatingCapture: boolean
+  isCapturing: boolean
+  interfaces: InterfaceOption[]
+}
 
-  // API: Initialize Interfaces
-  useEffect(() => {
-    const init = async (): Promise<void> => {
-      try {
-        const result = await window.api.getNetworkInterfaces()
-        setInterfaces(result.interfaces)
-        setIsCapturing(result.isCapturing)
-      } catch (err) {
-        console.error('Failed to load interfaces', err)
-      }
-    }
-    init()
-  }, [])
-
-  // Actions
-  const handleToggleCapture = async (): Promise<void> => {
-    setIsUpdatingCapture(true)
-    try {
-      const result = isCapturing ? await window.api.stopCapture() : await window.api.startCapture()
-      setIsCapturing(result.isCapturing)
-      if (!result.isCapturing) {
-        throughputSamplesRef.current = []
-      }
-    } catch (err) {
-      console.error('Capture toggle failed', err)
-    } finally {
-      setIsUpdatingCapture(false)
-    }
-  }
-
+export function BasicNetworkMonitor({
+  colorAccessibility,
+  handleAdvancedModeChange,
+  packets,
+  location,
+  registries,
+  handleToggleCapture,
+  isUpdatingCapture,
+  isCapturing,
+  interfaces
+}: BasicNetworkMonitorProps): React.JSX.Element {
   return (
     <div className="flex flex-col h-full space-y-4 p-6 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Network Monitor - Baisc Mode</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Network Monitor - Basic Mode</h1>
           <p className="text-muted-foreground">Real-time packet analysis and app insights</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleAdvancedModeChange}>
+            <Zap className="mr-2 h-4 w-4" />
+            Advanced Mode
+          </Button>
           <Button
             onClick={handleToggleCapture}
             disabled={isUpdatingCapture || interfaces.length === 0}
@@ -78,8 +68,12 @@ export function BasicNetworkMonitor(): React.JSX.Element {
       <div className="grid gap-4 md:grid-cols-7 flex-1 min-h-0">
         {/* Left: App Insights (4 cols) */}
         <div className="md:col-span-4 flex flex-col min-h-0 gap-4">
-          <GlobalMap />
-          <ProcessList />
+          <GlobalMap
+            colorAccessibility={colorAccessibility}
+            registries={registries}
+            location={location}
+          />
+          <ProcessList registries={registries} />
         </div>
 
         {/* Right: Live Packet Feed (3 cols) -> Swapped, actually ActivityList is packets. AppInsights is apps. */}
@@ -88,7 +82,11 @@ export function BasicNetworkMonitor(): React.JSX.Element {
         {/* I'll put AppInsights on the right side as a summary, and Packet List on the left as main feed. */}
 
         <div className="md:col-span-3 flex flex-col min-h-0">
-          <Visualization />
+          <Visualization
+            colorAccessibility={colorAccessibility}
+            registries={registries}
+            packets={packets}
+          />
         </div>
       </div>
     </div>
