@@ -34,17 +34,24 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@preline/accordion": "^3.2.3",
+    "@preline/tree-view": "^3.2.3",
     "@radix-ui/react-slot": "^1.2.4",
     "better-sqlite3": "^12.4.1",
     "cap": "^0.2.1",
+    "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "d3": "^7.9.0",
     "drizzle-orm": "^0.44.5",
     "electron-updater": "^6.3.9",
+    "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5",
     "framer-motion": "^12.23.24",
     "lucide-react": "^0.555.0",
     "pino": "^10.0.0",
     "ps-list": "^8.1.1",
+    "react-toastify": "^11.0.5",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7"
   },
@@ -85,5 +92,10 @@
     "typescript": "^5.9.3",
     "vite": "^7.0.5",
     "vitest": "^3.2.4"
+  },
+  "build": {
+    "win": {
+      "icon": "resources/favicon.ico"
+    }
   }
 }

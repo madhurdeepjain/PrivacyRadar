@@ -11,12 +11,30 @@ export class GeoLocationService {
     'country,region,regionName,city,zip,lat,lon,timezone,isp,org,as,asname,mobile,proxy,hosting'
   private readonly RATE_LIMIT_DELAY = 700
   private readonly BATCH_SIZE = 10
+  private readonly IPIFY_URL = 'https://api.ipify.org/?format=json'
 
   constructor() {
     this.locationCache = new Map()
     this.pendingRequests = new Map()
     this.requestQueue = []
     this.isProcessingQueue = false
+  }
+
+  async getPublicIP(): Promise<string> {
+    try {
+      const response = await fetch(this.IPIFY_URL)
+
+      if (!response.ok) {
+        logger.warn(`IPIFY-API request failed for public IP: ${response.status}`)
+        return ''
+      }
+
+      const apiData = await response.json()
+      return apiData.ip
+    } catch (error) {
+      logger.error(`GeoIP lookup error for public IP:`, error)
+      return ''
+    }
   }
 
   async lookup(ip: string): Promise<GeoLocationData> {
