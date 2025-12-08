@@ -1,4 +1,4 @@
-import { exec, execSync, execFile } from 'child_process'
+import { exec, execSync, execFile, execFileSync } from 'child_process'
 import { promisify } from 'util'
 import { existsSync, readdirSync, readlinkSync } from 'fs'
 import { BrowserWindow } from 'electron'
@@ -1014,12 +1014,13 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
   }
 
   private hasCommand(command: string): boolean {
+    // Validate command name to prevent command injection
     if (!/^[a-zA-Z0-9_-]+$/.test(command)) {
       return false
     }
 
     try {
-      execSync(`which ${command}`, { stdio: 'ignore' })
+      execFileSync('which', [command], { stdio: 'ignore' })
       return true
     } catch {
       return false

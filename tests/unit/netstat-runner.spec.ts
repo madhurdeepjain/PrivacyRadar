@@ -219,4 +219,138 @@ describe('collectNetstatRows', () => {
     )
     expect(udpRow?.state).toBeUndefined()
   })
+
+  describe('Error Handling', () => {
+    it('handles command execution failures', async () => {
+      setPlatform('linux')
+      const error = new Error('Command not found')
+      execFileMock.mockImplementation(
+        (cmd: string, args: string[], options: unknown, callback: ExecFileCallback) => {
+          const cb = (typeof options === 'function' ? options : callback) as ExecFileCallback
+          cb(error, undefined, 'netstat: command not found')
+          return undefined
+        }
+      )
+
+      await expect(collectNetstatRows()).rejects.toThrow('Command not found')
+      expect(execFileMock).toHaveBeenCalled()
+    })
+
+    it('handles timeout errors', async () => {
+      setPlatform('linux')
+      const timeoutError = new Error('Command timed out')
+      timeoutError.name = 'TimeoutError'
+      execFileMock.mockImplementation(
+        (cmd: string, args: string[], options: unknown, callback: ExecFileCallback) => {
+          const cb = (typeof options === 'function' ? options : callback) as ExecFileCallback
+          cb(timeoutError, undefined, '')
+          return undefined
+        }
+      )
+
+      await expect(collectNetstatRows()).rejects.toThrow('Command timed out')
+    })
+
+    it('handles empty output gracefully', async () => {
+      setPlatform('linux')
+      execFileMock.mockImplementation(
+        (cmd: string, args: string[], options: unknown, callback: ExecFileCallback) => {
+          const cb = (typeof options === 'function' ? options : callback) as ExecFileCallback
+          cb(null, '', '')
+          return undefined
+        }
+      )
+
+      const rows = await collectNetstatRows()
+      expect(rows).toEqual([])
+    })
+
+    it('handles invalid/malformed output gracefully', async () => {
+      setPlatform('linux')
+      execFileMock.mockImplementation(
+        (cmd: string, args: string[], options: unknown, callback: ExecFileCallback) => {
+          const cb = (typeof options === 'function' ? options : callback) as ExecFileCallback
+          cb(null, 'This is not valid netstat output\nRandom garbage data\n', '')
+          return undefined
+        }
+      )
+
+      const rows = await collectNetstatRows()
+      // Should return empty array or minimal valid rows, not crash
+      expect(Array.isArray(rows)).toBe(true)
+    })
+
+    it('handles output with only headers', async () => {
+      setPlatform('linux')
+      execFileMock.mockImplementation(
+        (cmd: string, args: string[], options: unknown, callback: ExecFileCallback) => {
+          const cb = (typeof options === 'function' ? options : callback) as ExecFileCallback
+          cb(null, 'Active Internet connections (w/o servers)\nProto Recv-Q Send-Q Local Address           Foreign Address         State\n', '')
+          return undefined
+        }
+      )
+
+      const rows = await collectNetstatRows()
+      expect(Array.isArray(rows)).toBe(true)
+      expect(rows.length).toBe(0)
+    })
+
+    it('handles stderr output without failing', async () => {
+      setPlatform('linux')
+      execFileMock.mockImplementation(
+        (cmd: string, args: string[], options: unknown, callback: ExecFileCallback) => {
+          const cb = (typeof options === 'function' ? options : callback) as ExecFileCallback
+          cb(null, loadFixture('linux'), 'Some warning message')
+          return undefined
+        }
+      )
+
+      const rows = await collectNetstatRows()
+      // Should still parse successfully despite stderr
+      expect(rows.length).toBeGreaterThan(0)
+    })
+
+
+    it('handles unsupported platform gracefully', async () => {
+      setPlatform('freebsd' as NodeJS.Platform)
+      mockExecWithFixture('linux') // Fallback to linux command
+
+      // Should not throw, but use fallback
+      const rows = await collectNetstatRows()
+      expect(Array.isArray(rows)).toBe(true)
+    })
+
+    it('respects custom timeout option', async () => {
+      setPlatform('linux')
+      mockExecWithFixture('linux')
+
+      await collectNetstatRows({ timeoutMs: 1000 })
+
+      expect(execFileMock).toHaveBeenCalledWith(
+        'netstat',
+        ['-apntu'],
+        expect.objectContaining({
+          timeout: 1000
+        }),
+        expect.any(Function)
+      )
+    })
+
+    it('handles partial/corrupted output', async () => {
+      setPlatform('linux')
+      execFileMock.mockImplementation(
+        (cmd: string, args: string[], options: unknown, callback: ExecFileCallback) => {
+          const cb = (typeof options === 'function' ? options : callback) as ExecFileCallback
+          cb(null, 'tcp        0      0 0.0.0.0:8080    0.0.0.0:*               LISTEN      \n' +
+                   'incomplete line with missing data\n' +
+                   'udp        0      0 0.0.0.0:53     0.0.0.0:*                           1234\n', '')
+          return undefined
+        }
+      )
+
+      const rows = await collectNetstatRows()
+      // Should parse what it can, skip invalid lines
+      expect(Array.isArray(rows)).toBe(true)
+    })
+  })
 })

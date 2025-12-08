@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import * as bootstrap from '../../../src/main/app/bootstrap'
 
 // Create mocks inline in hoisted scope to avoid import issues
@@ -75,7 +75,8 @@ vi.mock('@main/app/analyzer-runner', () => ({
   startAnalyzer: vi.fn(() => Promise.resolve()),
   stopAnalyzer: vi.fn(),
   updateAnalyzerInterfaces: vi.fn(() => Promise.resolve()),
-  setMainWindow: vi.fn()
+  setMainWindow: vi.fn(),
+  setSharedProcessTracker: vi.fn()
 }))
 
 vi.mock('@core/system/system-monitor-factory', () => ({
@@ -104,10 +105,37 @@ vi.mock('@main/app/window-manager', () => ({
 }))
 
 describe('Application Bootstrap Integration', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useRealTimers()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.useRealTimers()
+  })
 
   it('completes bootstrap sequence', async () => {
-    await expect(bootstrap.startApp()).resolves.not.toThrow()
+    await bootstrap.startApp()
+    
+    const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
+    const { getDatabase } = await import('@infra/db')
+    const { createMainWindow } = await import('@main/app/window-manager')
+    const { createSystemMonitor } = await import('@core/system/system-monitor-factory')
+    
+    expect(mockIpc.handlers.has('network:getInterfaces')).toBe(true)
+    expect(getDatabase).toHaveBeenCalled()
+    expect(createMainWindow).toHaveBeenCalled()
+    expect(createSystemMonitor).toHaveBeenCalled()
+
+    // Verify handlers actually work by calling them
+    const getInterfacesHandler = mockIpc.handlers.get('network:getInterfaces')
+    expect(getInterfacesHandler).toBeDefined()
+    const result = await getInterfacesHandler!()
+    expect(result).toHaveProperty('interfaces')
+    expect(result).toHaveProperty('isCapturing')
+    expect(result).toHaveProperty('selectedInterfaceNames')
+    expect(Array.isArray(result.interfaces)).toBe(true)
   })
 
   it('registers IPC handlers during bootstrap', async () => {
@@ -115,27 +143,122 @@ describe('Application Bootstrap Integration', () => {
     const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
     expect(mockIpc.handlers.has('network:getInterfaces')).toBe(true)
     expect(mockIpc.handlers.has('system:start')).toBe(true)
+
+    // Verify handlers return expected data structures
+    const systemStartHandler = mockIpc.handlers.get('system:start')
+    expect(systemStartHandler).toBeDefined()
+    const startResult = await systemStartHandler!()
+    expect(startResult).toEqual({ success: true })
+
+    const isSupportedHandler = mockIpc.handlers.get('system:is-supported')
+    expect(isSupportedHandler).toBeDefined()
+    const isSupported = await isSupportedHandler!()
+    expect(isSupported).toBe(true) // Test actual value, not just type
   })
 
-  it('initializes database during bootstrap', async () => {
-    await bootstrap.startApp()
 
-    const { getDatabase } = await import('@infra/db')
-    expect(getDatabase).toHaveBeenCalled()
-  })
+  describe('Error Handling', () => {
+    it('handles database migration failures gracefully', async () => {
+      const { runMigrations } = await import('@infra/db/migrate')
+      vi.mocked(runMigrations).mockImplementation(() => {
+        throw new Error('Migration failed')
+      })
 
-  it('creates main window during bootstrap', async () => {
-    await bootstrap.startApp()
+      const { logger } = await import('@infra/logging')
+      
+      // Bootstrap should continue even if migrations fail
+      await bootstrap.startApp()
+      
+      expect(logger.error).toHaveBeenCalledWith('Failed to run migrations', expect.any(Error))
+      // App should still start
+      const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
+      expect(mockIpc.handlers.has('network:getInterfaces')).toBe(true)
+    })
 
-    const { createMainWindow } = await import('@main/app/window-manager')
-    expect(createMainWindow).toHaveBeenCalled()
-  })
+    it('handles database initialization failures gracefully', async () => {
+      const { getDatabase } = await import('@infra/db')
+      vi.mocked(getDatabase).mockImplementation(() => {
+        throw new Error('Database initialization failed')
+      })
 
-  it('initializes system monitor during bootstrap', async () => {
-    await bootstrap.startApp()
+      const { logger } = await import('@infra/logging')
+      
+      // Bootstrap should continue even if database init fails
+      await bootstrap.startApp()
+      
+      expect(logger.error).toHaveBeenCalledWith('Failed to initialize database', expect.any(Error))
+      // App should still start
+      const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
+      expect(mockIpc.handlers.has('network:getInterfaces')).toBe(true)
+    })
 
-    const { createSystemMonitor } = await import('@core/system/system-monitor-factory')
-    expect(createSystemMonitor).toHaveBeenCalled()
+    it('handles window creation failures', async () => {
+      const { createMainWindow } = await import('@main/app/window-manager')
+      vi.mocked(createMainWindow).mockImplementation(() => {
+        throw new Error('Window creation failed')
+      })
+
+      // Bootstrap should throw if window creation fails (critical)
+      await expect(bootstrap.startApp()).rejects.toThrow('Window creation failed')
+    })
+
+    it('handles system monitor start failures gracefully', async () => {
+      const mockSystemMonitor = {
+        start: vi.fn().mockRejectedValue(new Error('System monitor start failed')),
+        stop: vi.fn(),
+        getActiveSessions: vi.fn(() => []),
+        isRunning: vi.fn(() => false)
+      }
+
+      const { createSystemMonitor } = await import('@core/system/system-monitor-factory')
+      vi.mocked(createSystemMonitor).mockReturnValue(mockSystemMonitor as any)
+
+      const { logger } = await import('@infra/logging')
+      
+      // Bootstrap should continue even if system monitor fails to start
+      await bootstrap.startApp()
+      
+      expect(logger.warn).toHaveBeenCalledWith('Failed to start system monitor', expect.any(Error))
+      // App should still start
+      const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
+      expect(mockIpc.handlers.has('network:getInterfaces')).toBe(true)
+    })
+
+    it('handles app.whenReady() failures', async () => {
+      const { app } = await import('electron')
+      vi.mocked(app.whenReady).mockRejectedValue(new Error('App not ready'))
+
+      await expect(bootstrap.startApp()).rejects.toThrow('App not ready')
+    })
+
+    it('handles IPC handler registration failures gracefully', async () => {
+      const mockIpc = mockHelpers.ipcMain
+      vi.mocked(mockIpc.handle).mockImplementation((channel: string) => {
+        if (channel === 'network:getInterfaces') {
+          throw new Error('Handler registration failed')
+        }
+      })
+
+      // Should continue registering other handlers
+      await bootstrap.startApp()
+      
+      // Other handlers should still be registered
+      expect(mockIpc.handlers.has('network:startCapture')).toBe(true)
+    })
+
+    it('handles multiple concurrent bootstrap attempts', async () => {
+      // Multiple bootstrap calls should not cause issues
+      const promises = [
+        bootstrap.startApp(),
+        bootstrap.startApp(),
+        bootstrap.startApp()
+      ]
+
+      await Promise.all(promises)
+
+      const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
+      expect(mockIpc.handlers.has('network:getInterfaces')).toBe(true)
+    })
   })
 })
 

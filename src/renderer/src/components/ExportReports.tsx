@@ -45,7 +45,10 @@ async function exportReports(sqlQuery: string): Promise<void> {
       workbook.xlsx
         .writeBuffer()
         .then((buffer) => FileSaver.saveAs(new Blob([buffer]), `${Date.now()}_Export.xlsx`))
-        .catch((err) => console.log('Error writing excel export', err))
+        .catch((err) => {
+          // Error handling - could use proper logging in production
+          console.error('Error writing excel export', err)
+        })
     } else if (!error_message && result_set.length === 0) {
       toast.update(toastId, {
         render: 'No data found for the given query.',

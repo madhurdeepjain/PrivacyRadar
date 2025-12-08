@@ -319,9 +319,12 @@ export class RegManager {
     const direction = this.getDirection(pkt)
     const size = pkt.size || 0
 
-    this.geoService
-      .lookup(ip)
-      .then((cachedGeoData) => {
+    // Fire-and-forget async operation with proper error handling
+    // We intentionally don't await this to avoid blocking packet processing
+    ;(async () => {
+      try {
+        const cachedGeoData = await this.geoService.lookup(ip)
+        
         if (!cachedGeoData.country && !cachedGeoData.city && !cachedGeoData.as) {
           return
         }
@@ -354,10 +357,13 @@ export class RegManager {
             bytesReceived: direction === 'inbound' ? size : 0
           })
         }
-      })
-      .catch((error) => {
+      } catch (error) {
         logger.debug(`Geo lookup failed for ${ip}:`, error)
-      })
+      }
+    })().catch((error) => {
+      // Catch any errors from the IIFE itself (shouldn't happen, but safety net)
+      logger.debug(`Geo lookup async wrapper failed for ${ip}:`, error)
+    })
   }
 
   private aggregateGeoLocations(appRegistry: ApplicationRegistry): void {

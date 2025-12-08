@@ -42,15 +42,30 @@ export async function startApp(): Promise<void> {
     const userDataPath = app.getPath('userData')
     const filePath = path.join(userDataPath, 'values.json')
     const geoLocationService = new GeoLocationService()
-    ipcMain.handle('network:getGeoLocation', async (_event, ip: string) => {
+    ipcMain.handle('network:getGeoLocation', async (_event, ip: unknown) => {
+      if (typeof ip !== 'string' || ip.length === 0 || ip.length > 45) {
+        // IPv6 addresses can be up to 45 characters
+        logger.error('Invalid IP address parameter', { ip })
+        throw new Error('Invalid IP address: must be a non-empty string with at most 45 characters')
+      }
+      // Basic IP format validation (allows IPv4 and IPv6)
+      if (!/^[0-9a-fA-F:.]+$/.test(ip)) {
+        logger.error('Invalid IP address format', { ip })
+        throw new Error('Invalid IP address format')
+      }
       return await geoLocationService.lookup(ip)
     })
     ipcMain.handle('network:getPublicIP', async () => {
       return await geoLocationService.getPublicIP()
     })
     ipcMain.handle('network:getInterfaces', async () => getInterfaceSelection())
-    ipcMain.handle('network:selectInterface', async (_event, interfaceNames: string[]) => {
-      await updateAnalyzerInterfaces(interfaceNames)
+    ipcMain.handle('network:selectInterface', async (_event, interfaceNames: unknown) => {
+      if (!Array.isArray(interfaceNames) || interfaceNames.length > 100) {
+        logger.error('Invalid interface names parameter', { interfaceNames })
+        throw new Error('Invalid interface names: must be an array with at most 100 elements')
+      }
+      // Additional validation happens in updateAnalyzerInterfaces
+      await updateAnalyzerInterfaces(interfaceNames as string[])
       return getInterfaceSelection()
     })
     ipcMain.handle('network:startCapture', async () => {
@@ -61,40 +76,82 @@ export async function startApp(): Promise<void> {
       stopAnalyzer()
       return getInterfaceSelection()
     })
-    ipcMain.handle('network:queryDatabase', async (_event, sql: string) => {
+    ipcMain.handle('network:queryDatabase', async (_event, sql: unknown) => {
+      if (typeof sql !== 'string') {
+        logger.error('Invalid SQL query parameter', { sql })
+        throw new Error('Invalid SQL query: must be a string')
+      }
+      // Additional validation happens in queryDatabase function
       return queryDatabase(sql)
     })
-    ipcMain.handle('set-value', (_event, key: string, value: string) => {
-      if (fs.existsSync(filePath)) {
-        fs.readFile(filePath, 'utf8', (err, data) => {
-          if (err) console.error('Error loading settings:', err)
-          else {
-            const values = JSON.parse(data)
-            values[key] = value
-            fs.writeFile(filePath, JSON.stringify(values), (err) => {
-              if (err) console.error('Error saving settings:', err)
-            })
+    ipcMain.handle('set-value', async (_event, key: string, value: string) => {
+      // Validate key to prevent path traversal
+      if (typeof key !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(key) || key.length > 100) {
+        logger.error('Invalid setting key', { key })
+        throw new Error('Invalid setting key')
+      }
+      
+      if (typeof value !== 'string' || value.length > 10000) {
+        logger.error('Invalid setting value', { key, valueLength: value?.length })
+        throw new Error('Invalid setting value')
+      }
+
+      try {
+        let values: Record<string, string> = {}
+        if (fs.existsSync(filePath)) {
+          const data = await fs.promises.readFile(filePath, 'utf8')
+          try {
+            const parsed = JSON.parse(data)
+            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+              values = parsed
+            } else {
+              logger.warn('Corrupted settings file, resetting', { filePath })
+            }
+          } catch (parseError) {
+            logger.warn('Failed to parse settings file, resetting', { filePath, error: parseError })
           }
-        })
-      } else {
-        const values = {}
+        }
+        
         values[key] = value
-        fs.writeFile(filePath, JSON.stringify(values), (err) => {
-          if (err) console.error('Error saving settings:', err)
-        })
+        
+        // Ensure directory exists before writing (idempotent - safe for concurrent calls)
+        const dirPath = path.dirname(filePath)
+        await fs.promises.mkdir(dirPath, { recursive: true })
+        
+        // Atomic write: use unique temp filename to avoid conflicts in concurrent writes
+        // Use timestamp + random to ensure uniqueness
+        const tmpPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).substring(7)}`
+        await fs.promises.writeFile(tmpPath, JSON.stringify(values), 'utf8')
+        await fs.promises.rename(tmpPath, filePath)
+      } catch (error) {
+        logger.error('Error saving setting', { key, error })
+        throw error
       }
     })
 
     ipcMain.handle('get-value', async (_event, key: string) => {
+      // Validate key to prevent path traversal
+      if (typeof key !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(key) || key.length > 100) {
+        logger.error('Invalid setting key', { key })
+        return null
+      }
+
       try {
         if (!fs.existsSync(filePath)) {
           return null
         }
         const data = await fs.promises.readFile(filePath, 'utf8')
         const values = JSON.parse(data)
-        return values[key]
+        
+        // Validate parsed structure
+        if (typeof values !== 'object' || values === null || Array.isArray(values)) {
+          logger.warn('Corrupted settings file', { filePath })
+          return null
+        }
+        
+        return values[key] ?? null
       } catch (err) {
-        console.error('Error loading settings:', err)
+        logger.error('Error loading settings', { key, error: err })
         return null
       }
     })

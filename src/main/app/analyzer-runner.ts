@@ -101,12 +101,32 @@ function ensureSelectionInSync(deviceInfo: Device): void {
   }
 }
 
+function validateInterfaceName(name: unknown): name is string {
+  return typeof name === 'string' && name.length > 0 && name.length <= 100 && /^[a-zA-Z0-9_-]+$/.test(name)
+}
+
+function validateInterfaceNamesArray(interfaceNames: unknown): interfaceNames is string[] {
+  if (!Array.isArray(interfaceNames)) {
+    return false
+  }
+  if (interfaceNames.length > 100) {
+    // Prevent DoS with extremely large arrays
+    return false
+  }
+  return interfaceNames.every((name) => validateInterfaceName(name))
+}
+
 function applySelectedInterfaces(deviceInfo: Device, interfaceNames?: string[]): void {
   const availableNames = new Set(deviceInfo.interfaces.map((iface) => iface.name))
 
   if (!interfaceNames || interfaceNames.length === 0) {
     selectedInterfaceNames = deviceInfo.interfaces.map((iface) => iface.name)
     return
+  }
+
+  // Validate interface names array
+  if (!validateInterfaceNamesArray(interfaceNames)) {
+    throw new Error('Invalid interface names: must be an array of valid interface name strings')
   }
 
   const normalized: string[] = []
@@ -171,8 +191,14 @@ export async function startAnalyzer(interfaceNames?: string | string[]): Promise
     iface.addresses = iface.addresses.map((addr) => formatIPv6Address(addr))
   })
   if (Array.isArray(interfaceNames)) {
+    if (!validateInterfaceNamesArray(interfaceNames)) {
+      throw new Error('Invalid interface names: must be an array of valid interface name strings')
+    }
     applySelectedInterfaces(deviceInfo, interfaceNames)
   } else if (interfaceNames) {
+    if (!validateInterfaceName(interfaceNames)) {
+      throw new Error('Invalid interface name: must be a valid interface name string')
+    }
     applySelectedInterfaces(deviceInfo, [interfaceNames])
   } else {
     ensureSelectionInSync(deviceInfo)
@@ -253,31 +279,72 @@ export function stopAnalyzer(): void {
   logger.info('Network analyzer stopped')
 }
 
+const ALLOWED_TABLES = ['global_snapshots', 'application_snapshots', 'process_snapshots']
+const DANGEROUS_KEYWORDS = /UNION|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|TRUNCATE|REPLACE/i
+
 export function queryDatabase(sql: string): [unknown[], string] {
-  const db = new Database(getDatabasePaths().dbPath)
+  if (typeof sql !== 'string' || sql.length === 0) {
+    return [[], 'SQL query must be a non-empty string']
+  }
+
+  const trimmed = sql.trim()
+  
+  // Only allow SELECT statements
+  if (!trimmed.toUpperCase().startsWith('SELECT')) {
+    return [[], 'Only SELECT queries are allowed']
+  }
+  
+  // Block dangerous keywords (check before FROM parsing)
+  if (DANGEROUS_KEYWORDS.test(trimmed)) {
+    return [[], 'Dangerous SQL keywords not allowed']
+  }
+  
+  // Additional safety: prevent comments, multiple statements (check early)
+  if (trimmed.includes('--') || trimmed.includes('/*') || trimmed.includes(';')) {
+    return [[], 'SQL comments and multiple statements not allowed']
+  }
+  
+  // Validate table name - extract FROM clause
+  const fromMatch = trimmed.match(/FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)/i)
+  if (!fromMatch) {
+    return [[], 'Invalid SQL syntax: FROM clause required']
+  }
+  
+  const tableName = fromMatch[1]
+  if (!ALLOWED_TABLES.includes(tableName)) {
+    return [[], `Table '${tableName}' is not accessible`]
+  }
+  
+  // Use existing database connection for performance
+  const db = getDatabase()
   try {
-    return [Array.from(db.prepare(sql).iterate()), '']
+    // Access underlying better-sqlite3 client for raw SQL
+    const sqliteClient = (db as unknown as { client: Database }).client
+    const stmt = sqliteClient.prepare(trimmed)
+    return [Array.from(stmt.iterate()), '']
   } catch (error) {
-    let message = ''
-    if (error instanceof Error) {
-      message = error.message
-    } else {
-      try {
-        message = String(error)
-      } catch {
-        message = 'Unknown error'
-      }
-    }
+    const message = error instanceof Error ? error.message : 'Query failed'
+    logger.error('Database query failed', { sql: trimmed.substring(0, 100), error: message })
     return [[], message]
-  } finally {
-    db.close()
   }
 }
 
 export async function updateAnalyzerInterfaces(interfaceNames: string[] = []): Promise<void> {
-  interfaceSwitchLock = interfaceSwitchLock
-    .catch(() => undefined)
-    .then(async () => {
+  // Validate input
+  if (!validateInterfaceNamesArray(interfaceNames)) {
+    throw new Error('Invalid interface names: must be an array of valid interface name strings')
+  }
+
+  interfaceSwitchLock = (async () => {
+    try {
+      // Wait for any previous interface update to complete
+      await interfaceSwitchLock
+    } catch (error) {
+      // Previous update failed, but we continue with our update
+      logger.debug('Previous interface update failed, continuing with new update', { error })
+    }
+
+    try {
       const deviceInfo = refreshDeviceInfo()
       const wasRunning = analyzer !== null
       const previousSelection = [...selectedInterfaceNames]
@@ -326,7 +393,11 @@ export async function updateAnalyzerInterfaces(interfaceNames: string[] = []): P
 
         throw error
       }
-    })
+    } catch (error) {
+      logger.error('Interface update failed', { interfaces: interfaceNames, error })
+      throw error
+    }
+  })()
 
   return interfaceSwitchLock
 }

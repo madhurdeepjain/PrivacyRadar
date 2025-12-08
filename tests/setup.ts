@@ -20,10 +20,20 @@ if (typeof window !== 'undefined') {
   })
 
   const apiStub: API = {
+    onApplicationRegistryData: vi.fn(),
+    onProcessRegistryData: vi.fn(),
+    onGlobalRegistryData: vi.fn(),
     onNetworkData: vi.fn(),
     removeNetworkDataListener: vi.fn(),
     getNetworkInterfaces: vi.fn(),
-    selectNetworkInterface: vi.fn()
+    selectNetworkInterface: vi.fn(),
+    startCapture: vi.fn(),
+    stopCapture: vi.fn(),
+    queryDatabase: vi.fn(),
+    setValue: vi.fn(),
+    getValue: vi.fn(),
+    getGeoLocation: vi.fn(),
+    getPublicIP: vi.fn()
   }
 
   Object.defineProperty(window, 'api', {

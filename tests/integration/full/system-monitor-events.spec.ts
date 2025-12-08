@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import * as bootstrap from '../../../src/main/app/bootstrap'
 
 const mockHelpers = vi.hoisted(() => {
@@ -89,7 +89,8 @@ vi.mock('@main/app/analyzer-runner', () => ({
   startAnalyzer: vi.fn(() => Promise.resolve()),
   stopAnalyzer: vi.fn(),
   updateAnalyzerInterfaces: vi.fn(() => Promise.resolve()),
-  setMainWindow: vi.fn()
+  setMainWindow: vi.fn(),
+  setSharedProcessTracker: vi.fn()
 }))
 
 const mockSystemMonitor = {
@@ -122,7 +123,13 @@ vi.mock('@main/app/window-manager', () => ({
 describe('System Monitor Events Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.useRealTimers()
     mockSystemMonitor.getActiveSessions.mockReturnValue([])
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
   it('registers event listener during bootstrap', async () => {

@@ -31,7 +31,6 @@ function App(): React.JSX.Element {
     window.api.setValue('advancedMode', (!advancedMode).toString())
   }
   useEffect(() => {
-    console.log('Loading settings...')
     window.api.getValue('advancedMode').then((value) => {
       if (value === 'true') {
         setAdvancedMode(true)
@@ -39,16 +38,13 @@ function App(): React.JSX.Element {
         setAdvancedMode(false)
       }
     })
-    console.log('Loading dark mode setting...')
     window.api.getValue('darkMode').then((value) => {
-      console.log('Dark mode value:', value)
       if (value === 'true') {
         setDarkMode(true)
       } else {
         setDarkMode(false)
       }
     })
-    console.log('Loading view mode setting...')
     window.api.getValue('viewMode').then((value) => {
       if (value === 'network' || value === 'system') {
         setViewMode(value)
@@ -56,7 +52,6 @@ function App(): React.JSX.Element {
         setViewMode('network')
       }
     })
-    console.log('Loading max packets setting...')
     window.api.getValue('maxPackets').then((value) => {
       const parsedValue = parseInt(value, 10)
       if (!isNaN(parsedValue)) {
