@@ -628,14 +628,10 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
 
     try {
       // Use execFile to avoid shell interpretation - pass devicePath as argument
-      const { stdout } = await execFileAsync(
-        'lsof',
-        [devicePath],
-        {
-          timeout: LinuxSystemMonitor.LSOF_TIMEOUT_MS,
-          maxBuffer: 1024 * 1024
-        }
-      )
+      const { stdout } = await execFileAsync('lsof', [devicePath], {
+        timeout: LinuxSystemMonitor.LSOF_TIMEOUT_MS,
+        maxBuffer: 1024 * 1024
+      })
 
       const lines = stdout.trim().split('\n').slice(1)
       if (lines.length > 0 && lines[0].trim() !== '') {
@@ -899,14 +895,10 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
       if (this.hasCommand('lsof')) {
         try {
           // Use execFile to avoid shell interpretation - pass file path as argument
-          const { stdout } = await execFileAsync(
-            'lsof',
-            [filePath],
-            {
-              timeout: LinuxSystemMonitor.LSOF_TIMEOUT_MS,
-              maxBuffer: 1024 * 1024
-            }
-          )
+          const { stdout } = await execFileAsync('lsof', [filePath], {
+            timeout: LinuxSystemMonitor.LSOF_TIMEOUT_MS,
+            maxBuffer: 1024 * 1024
+          })
 
           const lines = stdout
             .trim()
