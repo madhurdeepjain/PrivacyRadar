@@ -108,8 +108,8 @@ function NetworkMonitor({
 
       // App Stats
       setAppStatsMap((prev) => {
-        const appName = data.procName || 'UNKNOWN'
-        const key = `${appName}-${data.pid ?? 'N/A'}`
+        const appName = data.appName || 'UNKNOWN'
+        const key = appName
         const existing = prev[key]
 
         if (existing) {
