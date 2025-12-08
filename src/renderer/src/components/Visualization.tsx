@@ -18,7 +18,6 @@ function Visualization({
   const chartInstance = useRef<Chart>(null!)
   const pieChartInstance = useRef<Chart>(null!)
   const dataHistoryRef = useRef<Array<{ timestamp: number; bytes: number }>>([])
-  const maxYValueRef = useRef<number>(0)
 
   function aggregateBytesByTimeWindow(
     packets: Array<PacketMetadata>,
@@ -144,15 +143,17 @@ function Visualization({
               font: {
                 size: 10
               },
+              stepSize: 25 * 1024 * 1024, // 5 MBps intervals = 25 MB per 5s window (5 MBps * 5 seconds)
               callback: function (value) {
-                const bytes = Number(value)
-                if (bytes < 1024) return `${bytes.toFixed(0)} B`
-                if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-                return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+                // Convert bytes per 5s window to MBps (divide by 5 seconds and convert to MB)
+                const bytesPer5s = Number(value)
+                const mbps = bytesPer5s / (5 * 1024 * 1024) // Convert to MBps
+                return `${mbps.toFixed(1)} MBps`
               }
             },
             beginAtZero: true,
-            max: undefined // Will be set dynamically but stable
+            max: 25 * 1024 * 1024 * 5, // 25 MBps = 125 MB per 5s window - fixed baseline
+            suggestedMax: 25 * 1024 * 1024 * 5 // Ensure it stays at 25 MBps
           }
         }
       }
@@ -200,7 +201,21 @@ function Visualization({
     })
   }, [registries, colorAccessibility])
   useEffect(() => {
-    if (!packets || packets.length === 0) return
+    if (!chartInstance.current || !pieChartInstance.current) return
+
+    // Handle case when there's no data - set default scale to 25 MBps
+    if (!packets || packets.length === 0) {
+      // Set default Y-axis scale when no data - fixed at 25 MBps
+      if (chartInstance.current.options.scales?.y) {
+        chartInstance.current.options.scales.y.max = 25 * 1024 * 1024 * 5 // 25 MBps (125 MB per 5s)
+      }
+      // Clear chart data
+      chartInstance.current.data.labels = []
+      chartInstance.current.data.datasets[0].data = []
+      chartInstance.current.update('none') // Use 'none' mode to prevent animation
+      return
+    }
+
     const aggregatedData = aggregateBytesByTimeWindow(packets, 5000)
     const inboundSum = Array.from(registries[registries.length - 1].values()).reduce(
       (acc, registry) => acc + registry.inboundBytes,
@@ -210,7 +225,6 @@ function Visualization({
       (acc, registry) => acc + registry.outboundBytes,
       0
     )
-    if (!chartInstance.current || !pieChartInstance.current) return
 
     // Update pie chart
     pieChartInstance.current.data.datasets[0].data = [inboundSum, outboundSum]
@@ -227,31 +241,31 @@ function Visualization({
       ? 'rgba(12, 123, 220, 0.1)'
       : 'rgba(0, 128, 0, 0.1)'
 
-    // Update Y-axis max to maintain stable scale
+    // Update Y-axis max: fixed at 25 MBps baseline, expand only if data exceeds it
+    // Y-axis shows rate (MBps), but data is stored as bytes per 5s window
     if (aggregatedData.length > 0 && chartInstance.current.options.scales?.y) {
       const currentMax = Math.max(...aggregatedData.map((d) => d.bytes))
+      // 25 MBps = 25 * 1024 * 1024 bytes per second
+      // For 5-second window: 25 MBps * 5 seconds = 125 MB = 125 * 1024 * 1024 bytes
+      const fixedBaseline = 25 * 1024 * 1024 * 5 // 125 MB in bytes (25 MBps baseline)
 
-      // Update max value: increase if current max is higher, or reset if significantly lower
-      if (currentMax > maxYValueRef.current) {
-        maxYValueRef.current = currentMax
-      } else if (currentMax < maxYValueRef.current * 0.3 && maxYValueRef.current > 0) {
-        // If current max is less than 30% of stored max, reset to current (traffic dropped significantly)
-        maxYValueRef.current = currentMax
-      }
+      // If current max exceeds baseline, expand scale with 10% padding
+      if (currentMax > fixedBaseline) {
+        const paddedMax = currentMax * 1.1
 
-      // Add 20% padding to the max value for better visualization
-      const paddedMax = maxYValueRef.current * 1.2
-      // Round up to a nice round number based on magnitude
-      let roundedMax: number
-      if (paddedMax < 1024) {
-        roundedMax = Math.ceil(paddedMax / 100) * 100 // Round to nearest 100B
-      } else if (paddedMax < 1024 * 1024) {
-        roundedMax = Math.ceil(paddedMax / 10000) * 10000 // Round to nearest 10KB
+        // Round up to nearest 5 MBps interval (5 MBps = 25 MB per 5s window)
+        const mbps = paddedMax / (5 * 1024 * 1024) // Convert to MBps
+        const roundedMbps = Math.ceil(mbps / 5) * 5 // Round to nearest 5 MBps
+        const roundedMax = roundedMbps * 5 * 1024 * 1024 // Convert back to bytes per 5s
+
+        chartInstance.current.options.scales.y.max = roundedMax
       } else {
-        roundedMax = Math.ceil(paddedMax / (100 * 1024 * 1024)) * (100 * 1024 * 1024) // Round to nearest 100MB
+        // Data is within baseline - use fixed 25 MBps (125 MB per 5s) scale
+        chartInstance.current.options.scales.y.max = fixedBaseline
       }
-
-      chartInstance.current.options.scales.y.max = roundedMax
+    } else if (aggregatedData.length === 0 && chartInstance.current.options.scales?.y) {
+      // No aggregated data - reset to fixed 25 MBps baseline
+      chartInstance.current.options.scales.y.max = 25 * 1024 * 1024 * 5
     }
 
     pieChartInstance.current.update()
