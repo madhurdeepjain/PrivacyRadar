@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Activity, Shield, Settings, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { Button } from './ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from './ui/dialog'
 import logo from '../../../../resources/icon.png'
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -16,7 +17,7 @@ interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
   setAdvancedMode: React.Dispatch<React.SetStateAction<boolean>>
   darkMode: boolean
   setDarkMode: React.Dispatch<React.SetStateAction<boolean>>
-  handleAdvancedModeChange: (event: React.ChangeEvent<HTMLInputElement>) => void
+  handleAdvancedModeChange: () => void
 }
 
 export function Sidebar({
@@ -108,131 +109,132 @@ export function Sidebar({
           <Button
             variant="ghost"
             className={cn('w-full', isCollapsed ? 'justify-center px-2' : 'justify-start')}
-            title={isCollapsed ? 'Please open the sidebar to access Preferences' : undefined}
+            title={isCollapsed ? 'Preferences' : undefined}
             onClick={() => {
-              if (isCollapsed) setShowSettings(true)
-              if (!isCollapsed) setShowSettings(!showSettings)
-              if (isCollapsed) setIsCollapsed(false)
+              if (isCollapsed) {
+                setIsCollapsed(false)
+                setShowSettings(true)
+              } else {
+                setShowSettings(true)
+              }
             }}
           >
             <Settings className={cn('h-4 w-4', !isCollapsed && 'mr-2')} />
             {!isCollapsed && 'Preferences'}
           </Button>
-          {!isCollapsed && showSettings && (
-            <div className="gap-4 shrink-0 animate-in slide-in-from-top-2 fade-in duration-200">
-              <div className="gap-4 shrink-0">
-                <label
-                  className={cn(
-                    'themeSwitcherTwo relative inline-flex cursor-pointer select-none items-center',
-                    !isCollapsed && 'mr-2'
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={darkMode}
-                    onChange={handleDarkModeChange}
-                    className="sr-only"
-                  />
-                  <span className={cn('h-4 w-4', !isCollapsed && 'mr-2')}>
-                    {!isCollapsed && 'Light'}
-                  </span>
-                  <span
-                    className={`slider mx-4 flex h-8 w-[60px] items-center rounded-full p-1 duration-200 ${
-                      darkMode ? 'bg-[#212b36]' : 'bg-[#CCCCCE]'
-                    }`}
-                  >
-                    <span
-                      className={`dot h-6 w-6 rounded-full bg-white duration-200 ${
-                        darkMode ? 'translate-x-[28px]' : ''
-                      }`}
-                    ></span>
-                  </span>
-                  <span className={cn('h-4 w-4', !isCollapsed && 'mr-2')}>
-                    {!isCollapsed && 'Dark'}
-                  </span>
-                </label>
-                <label
-                  className={cn(
-                    'themeSwitcherTwo relative inline-flex cursor-pointer select-none items-center',
-                    !isCollapsed && 'mr-2'
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={advancedMode}
-                    onChange={handleAdvancedModeChange}
-                    className="sr-only"
-                  />
-                  <span className={cn('h-4 w-4', !isCollapsed && 'mr-2')}>
-                    {!isCollapsed && 'Basic'}
-                  </span>
-                  <span
-                    className={`slider mx-4 flex h-8 w-[60px] items-center rounded-full p-1 duration-200 ${
-                      advancedMode ? 'bg-[#212b36]' : 'bg-[#CCCCCE]'
-                    }`}
-                  >
-                    <span
-                      className={`dot h-6 w-6 rounded-full bg-white duration-200 ${
-                        advancedMode ? 'translate-x-[28px]' : ''
-                      }`}
-                    ></span>
-                  </span>
-                  <span className={cn('h-4 w-4', !isCollapsed && 'mr-2')}>
-                    {!isCollapsed && 'Advanced'}
-                  </span>
-                </label>
-                <label
-                  className={cn(
-                    'themeSwitcherTwo relative inline-flex cursor-pointer select-none items-center',
-                    !isCollapsed && 'mr-2'
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={colorAccessibility}
-                    onChange={toggleColorAccessibility}
-                    className="sr-only"
-                  />
-                  <span className={cn('h-4 w-4', !isCollapsed && 'mr-2')}>
-                    {!isCollapsed && 'Color'}
-                  </span>
-                  <span
-                    className={`slider mx-4 flex h-8 w-[60px] items-center rounded-full p-1 duration-200 ${
-                      colorAccessibility ? 'bg-[#212b36]' : 'bg-[#CCCCCE]'
-                    }`}
-                  >
-                    <span
-                      className={`dot h-6 w-6 rounded-full bg-white duration-200 ${
-                        colorAccessibility ? 'translate-x-[28px]' : ''
-                      }`}
-                    ></span>
-                  </span>
-                  <span className={cn('h-4 w-4', !isCollapsed && 'mr-2')}>
-                    {!isCollapsed && 'Color Accessible'}
-                  </span>
-                </label>
-                <div className="max-w-sm mx-auto">
-                  <label
-                    htmlFor="number-input"
-                    className="block mb-2.5 text-sm font-medium text-heading"
-                  >
-                    Max Packets
-                  </label>
-                  <input
-                    type="number"
-                    id="number-input"
-                    aria-describedby="helper-text-explanation"
-                    className="block w-full px-3 py-2.5 bg-neutral-secondary-medium border border-default-medium text-heading text-sm rounded-base focus:ring-brand focus:border-brand shadow-xs placeholder:text-body"
-                    value={maxPackets}
-                    onChange={(e) => handleMaxPacketsChange(Number(e.target.value))}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
+
+      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogClose onClose={() => setShowSettings(false)} />
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Preferences
+            </DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-6 space-y-6">
+            {/* Theme Toggle */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium">Theme</label>
+              <label className="themeSwitcherTwo relative flex cursor-pointer select-none items-center w-full">
+                <span className="text-sm w-20 text-left">Light</span>
+                <input
+                  type="checkbox"
+                  checked={darkMode}
+                  onChange={handleDarkModeChange}
+                  className="sr-only"
+                />
+                <span
+                  className={`slider mx-4 flex h-8 w-[60px] items-center rounded-full p-1 duration-200 flex-shrink-0 ${
+                    darkMode ? 'bg-[#212b36]' : 'bg-[#CCCCCE]'
+                  }`}
+                >
+                  <span
+                    className={`dot h-6 w-6 rounded-full bg-white duration-200 ${
+                      darkMode ? 'translate-x-[28px]' : ''
+                    }`}
+                  ></span>
+                </span>
+                <span className="text-sm w-20 text-right">Dark</span>
+              </label>
+            </div>
+
+            {/* Mode Toggle */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium">Display Mode</label>
+              <label className="themeSwitcherTwo relative flex cursor-pointer select-none items-center w-full">
+                <span className="text-sm w-20 text-left">Basic</span>
+                <input
+                  type="checkbox"
+                  checked={advancedMode}
+                  onChange={() => handleAdvancedModeChange()}
+                  className="sr-only"
+                />
+                <span
+                  className={`slider mx-4 flex h-8 w-[60px] items-center rounded-full p-1 duration-200 flex-shrink-0 ${
+                    advancedMode ? 'bg-[#212b36]' : 'bg-[#CCCCCE]'
+                  }`}
+                >
+                  <span
+                    className={`dot h-6 w-6 rounded-full bg-white duration-200 ${
+                      advancedMode ? 'translate-x-[28px]' : ''
+                    }`}
+                  ></span>
+                </span>
+                <span className="text-sm w-20 text-right">Advanced</span>
+              </label>
+            </div>
+
+            {/* Color Accessibility Toggle */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium">Color Accessibility</label>
+              <label className="themeSwitcherTwo relative flex cursor-pointer select-none items-center w-full">
+                <span className="text-sm w-20 text-left">Color</span>
+                <input
+                  type="checkbox"
+                  checked={colorAccessibility}
+                  onChange={toggleColorAccessibility}
+                  className="sr-only"
+                />
+                <span
+                  className={`slider mx-4 flex h-8 w-[60px] items-center rounded-full p-1 duration-200 flex-shrink-0 ${
+                    colorAccessibility ? 'bg-[#212b36]' : 'bg-[#CCCCCE]'
+                  }`}
+                >
+                  <span
+                    className={`dot h-6 w-6 rounded-full bg-white duration-200 ${
+                      colorAccessibility ? 'translate-x-[28px]' : ''
+                    }`}
+                  ></span>
+                </span>
+                <span className="text-sm w-20 text-right">Accessible</span>
+              </label>
+            </div>
+
+            {/* Max Packets Input */}
+            <div className="space-y-3">
+              <label htmlFor="number-input" className="text-sm font-medium block">
+                Max Packets
+              </label>
+              <input
+                type="number"
+                id="number-input"
+                aria-describedby="helper-text-explanation"
+                className="block w-full px-4 py-2.5 bg-background border border-input text-foreground text-sm rounded-md focus:ring-2 focus:ring-ring focus:border-ring transition-colors"
+                value={maxPackets}
+                onChange={(e) => handleMaxPacketsChange(Number(e.target.value))}
+                min="1"
+                required
+              />
+              <p id="helper-text-explanation" className="text-xs text-muted-foreground">
+                Maximum number of packets to display in the network monitor
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
