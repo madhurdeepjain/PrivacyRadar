@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { queryDatabase } from '../../src/main/app/analyzer-runner'
+import { queryDatabase } from '@app/analyzer-runner'
 import { getDatabase } from '@infra/db'
 
 vi.mock('electron', () => ({
@@ -55,7 +55,6 @@ describe('DoS Prevention Tests', () => {
 
       const results = await Promise.all(queries)
       expect(results).toHaveLength(1000)
-      // All should complete without crashing
       results.forEach(([data, error]) => {
         expect(Array.isArray(data)).toBe(true)
       })

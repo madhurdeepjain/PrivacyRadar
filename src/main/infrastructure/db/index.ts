@@ -23,4 +23,3 @@ export function getDatabase(): BetterSQLite3Database<typeof schema> {
 }
 
 export { schema }
-export * from './services/settings.service'

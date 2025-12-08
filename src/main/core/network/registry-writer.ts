@@ -66,57 +66,53 @@ export class RegistryWriter {
     }
   }
 
-  private writeGlobalRegistry(registry: Map<string, GlobalRegistry>): void {
-    const snapshot = {
-      timestamp: Date.now(),
-      interfaces: Array.from(registry.values())
-    }
-
-    const prefix = this.isFirstGlobal ? '  ' : ',\n  '
-    this.isFirstGlobal = false
-
+  private appendSnapshot(filePath: string, snapshot: unknown, isFirstRef: { value: boolean }): void {
+    const prefix = isFirstRef.value ? '  ' : ',\n  '
+    isFirstRef.value = false
     appendFileSync(
-      this.globalRegistryFile,
+      filePath,
       prefix + JSON.stringify(snapshot, null, 2).split('\n').join('\n  ')
     )
+  }
+
+  private writeGlobalRegistry(registry: Map<string, GlobalRegistry>): void {
+    this.appendSnapshot(
+      this.globalRegistryFile,
+      {
+        timestamp: Date.now(),
+        interfaces: Array.from(registry.values())
+      },
+      { value: this.isFirstGlobal }
+    )
+    this.isFirstGlobal = false
   }
 
   private writeAppRegistries(registries: Map<string, ApplicationRegistry>): void {
-    const serialized = Array.from(registries.values()).map((reg) => this.serializeAppRegistry(reg))
-
-    const snapshot = {
-      timestamp: Date.now(),
-      count: registries.size,
-      applications: serialized
-    }
-
-    const prefix = this.isFirstApp ? '  ' : ',\n  '
-    this.isFirstApp = false
-
-    appendFileSync(
+    this.appendSnapshot(
       this.appRegistryFile,
-      prefix + JSON.stringify(snapshot, null, 2).split('\n').join('\n  ')
+      {
+        timestamp: Date.now(),
+        count: registries.size,
+        applications: Array.from(registries.values()).map((reg) => this.serializeAppRegistry(reg))
+      },
+      { value: this.isFirstApp }
     )
+    this.isFirstApp = false
   }
 
   private writeProcessRegistries(registries: Map<string, ProcessRegistry>): void {
-    const serialized = Array.from(registries.values()).map((reg) =>
-      this.serializeProcessRegistry(reg)
-    )
-
-    const snapshot = {
-      timestamp: Date.now(),
-      count: registries.size,
-      processes: serialized
-    }
-
-    const prefix = this.isFirstProcess ? '  ' : ',\n  '
-    this.isFirstProcess = false
-
-    appendFileSync(
+    this.appendSnapshot(
       this.processRegistryFile,
-      prefix + JSON.stringify(snapshot, null, 2).split('\n').join('\n  ')
+      {
+        timestamp: Date.now(),
+        count: registries.size,
+        processes: Array.from(registries.values()).map((reg) =>
+          this.serializeProcessRegistry(reg)
+        )
+      },
+      { value: this.isFirstProcess }
     )
+    this.isFirstProcess = false
   }
 
   private serializeAppRegistry(registry: ApplicationRegistry): SerializableApplicationRegistry {

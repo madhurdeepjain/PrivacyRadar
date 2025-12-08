@@ -16,7 +16,6 @@ describe('Command Injection Prevention', () => {
   })
 
   describe('hasCommand validation', () => {
-    // This tests the validation logic that should be in hasCommand
     const validateCommand = (command: string): boolean => {
       return /^[a-zA-Z0-9_-]+$/.test(command)
     }
@@ -64,12 +63,62 @@ describe('Command Injection Prevention', () => {
       const command = 'which'
       const args = ['lsof']
       
-      // This is the safe way - execFileSync with array
       execFileSync(command, args, { stdio: 'ignore' })
       
       expect(execFileSync).toHaveBeenCalledWith(command, args, { stdio: 'ignore' })
       expect(execFileSync).not.toHaveBeenCalledWith(expect.stringContaining('which lsof'), expect.anything(), expect.anything())
     })
   })
+
+  describe('Edge Cases', () => {
+    const validateCommand = (command: string): boolean => {
+      return /^[a-zA-Z0-9_-]+$/.test(command)
+    }
+
+    it('handles null input', () => {
+      // @ts-expect-error Testing invalid input
+      const result = validateCommand(null)
+      expect(typeof result === 'boolean').toBe(true)
+    })
+
+    it('handles undefined input', () => {
+      // @ts-expect-error Testing invalid input
+      const result = validateCommand(undefined)
+      expect(typeof result === 'boolean').toBe(true)
+    })
+
+    it('handles commands with newlines', () => {
+      expect(validateCommand('command\nrm -rf /')).toBe(false)
+      expect(validateCommand('command\rrm -rf /')).toBe(false)
+    })
+
+    it('handles commands with null bytes', () => {
+      expect(validateCommand('command\0rm -rf /')).toBe(false)
+    })
+
+    it('handles commands with unicode characters', () => {
+      expect(validateCommand('测试')).toBe(false)
+      expect(validateCommand('command-测试')).toBe(false)
+    })
+
+    it('handles very long command names (DoS prevention)', () => {
+      const longCommand = 'a'.repeat(10000)
+      const result = validateCommand(longCommand)
+      expect(typeof result === 'boolean').toBe(true)
+    })
+
+    it('handles commands with control characters', () => {
+      expect(validateCommand('command\targ')).toBe(false)
+      expect(validateCommand('command\varg')).toBe(false)
+      expect(validateCommand('command\farg')).toBe(false)
+    })
+
+    it('handles commands with various encodings', () => {
+      expect(validateCommand('command%20arg')).toBe(false)
+      expect(validateCommand('command+arg')).toBe(false)
+      expect(validateCommand('command%2Farg')).toBe(false)
+    })
+  })
+>>>>>>> e402cf9 (refactor: remove duplicates, reorganize tests, optimize code)
 })
 

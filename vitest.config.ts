@@ -57,10 +57,16 @@ export default defineConfig({
         test: {
           include: [
             'tests/integration/**/*.spec.{ts,tsx}',
-            'src/main/**/*.test.ts',
-            'tests/unit/**/*.spec.ts'
+            'tests/unit/**/*.spec.{ts,tsx}',
+            'tests/security/**/*.spec.{ts,tsx}'
           ],
-          exclude: ['tests/e2e/**', 'node_modules/**', 'dist/**', 'out/**'],
+          exclude: [
+            'tests/e2e/**',
+            'tests/unit/renderer/**',
+            'node_modules/**',
+            'dist/**',
+            'out/**'
+          ],
           environment: 'node',
           setupFiles: [
             'tests/setup.ts',
@@ -75,7 +81,7 @@ export default defineConfig({
         },
         test: {
           include: [
-            'src/renderer/**/*.test.{ts,tsx}'
+            'tests/unit/renderer/**/*.test.{ts,tsx}'
           ],
           exclude: ['tests/e2e/**', 'node_modules/**', 'dist/**', 'out/**'],
           environment: 'jsdom',

@@ -1,8 +1,9 @@
 import '@testing-library/jest-dom/vitest'
+import React from 'react'
 import { render, screen, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import NetworkMonitor from './NetworkMonitor'
+import NetworkMonitor from '@renderer/components/NetworkMonitor'
 
 type PacketListener = Parameters<Window['api']['onNetworkData']>[0]
 type Packet = Parameters<PacketListener>[0]

@@ -62,7 +62,7 @@ function mockExecWithFixture(name: FixtureName): void {
   })
 
 describe('collectNetstatRows', () => {
-  let collectNetstatRows: (typeof import('../../src/main/core/network/netstat-runner'))['collectNetstatRows']
+  let collectNetstatRows: (typeof import('@main/core/network/netstat-runner'))['collectNetstatRows']
   const originalPlatform = process.platform as NodeJS.Platform
 
   const setPlatform = (value: NodeJS.Platform): void => {
@@ -73,7 +73,7 @@ describe('collectNetstatRows', () => {
   }
 
   beforeAll(async () => {
-    ;({ collectNetstatRows } = await import('../../src/main/core/network/netstat-runner'))
+    ;({ collectNetstatRows } = await import('@main/core/network/netstat-runner'))
   })
 
   afterEach(() => {

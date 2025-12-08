@@ -47,6 +47,17 @@ export class RegistryRepository {
     }
   }
 
+  private async insertSnapshots<T>(
+    snapshots: T[],
+    table: typeof globalSnapshots | typeof applicationSnapshots | typeof processSnapshots,
+    typeName: string
+  ): Promise<void> {
+    logger.debug(`Prepared ${snapshots.length} ${typeName} snapshots`)
+    if (snapshots.length > 0) {
+      await this.db.insert(table).values(snapshots as any)
+    }
+  }
+
   private async writeGlobalSnapshots(registry: Map<string, GlobalRegistry>): Promise<void> {
     const snapshots = Array.from(registry.values()).map((reg) => ({
       interfaceName: reg.interfaceName,
@@ -66,10 +77,7 @@ export class RegistryRepository {
       firstSeen: new Date(reg.firstSeen),
       lastSeen: new Date(reg.lastSeen)
     }))
-    logger.debug(`Prepared ${snapshots.length} global snapshots`)
-    if (snapshots.length > 0) {
-      await this.db.insert(globalSnapshots).values(snapshots)
-    }
+    await this.insertSnapshots(snapshots, globalSnapshots, 'global')
   }
 
   private async writeApplicationSnapshots(
@@ -100,10 +108,7 @@ export class RegistryRepository {
       firstSeen: new Date(reg.firstSeen),
       lastSeen: new Date(reg.lastSeen)
     }))
-    logger.debug(`Prepared ${snapshots.length} global snapshots`)
-    if (snapshots.length > 0) {
-      await this.db.insert(applicationSnapshots).values(snapshots)
-    }
+    await this.insertSnapshots(snapshots, applicationSnapshots, 'application')
   }
 
   private async writeProcessSnapshots(registries: Map<string, ProcessRegistry>): Promise<void> {
@@ -134,10 +139,7 @@ export class RegistryRepository {
       firstSeen: new Date(reg.firstSeen),
       lastSeen: new Date(reg.lastSeen)
     }))
-    logger.debug(`Prepared ${snapshots.length} global snapshots`)
-    if (snapshots.length > 0) {
-      await this.db.insert(processSnapshots).values(snapshots)
-    }
+    await this.insertSnapshots(snapshots, processSnapshots, 'process')
   }
 
   async close(): Promise<void> {

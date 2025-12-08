@@ -1,10 +1,41 @@
-import { describe, it, expect, vi } from 'vitest'
-import { queryDatabase } from '../../src/main/app/analyzer-runner'
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest'
 import { getDatabase } from '@infra/db'
+
+vi.mock('electron', () => ({
+  app: {
+    getAppPath: vi.fn(() => '/test/app/path')
+  }
+}))
+
+vi.mock('cap', () => ({
+  default: {}
+}))
 
 vi.mock('@infra/db', () => ({
   getDatabase: vi.fn()
 }))
+
+vi.mock('@infra/logging', () => ({
+  logger: {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn()
+  }
+}))
+
+vi.mock('@config/constants', () => ({
+  DEV_DATA_PATH: '/test/dev-data',
+  PROC_CON_SNAPSHOT_INTERVAL_MS: 5000,
+  REGISTRY_SNAPSHOT_INTERVAL_MS: 10000
+}))
+
+// Import after mocks
+let queryDatabase: (sql: string) => [unknown[], string]
+
+beforeAll(async () => {
+  const module = await import('@app/analyzer-runner')
+  queryDatabase = module.queryDatabase
+})
 
 describe('queryDatabase Security Tests', () => {
   const mockDb = {
@@ -62,7 +93,8 @@ describe('queryDatabase Security Tests', () => {
     })
 
     it('blocks comments', () => {
-      const [results, error] = queryDatabase('SELECT * FROM global_snapshots -- DROP TABLE')
+      // Use a query that won't match dangerous keywords but has a comment
+      const [results, error] = queryDatabase('SELECT id FROM global_snapshots -- malicious comment')
       expect(results).toEqual([])
       expect(error).toContain('SQL comments')
     })
@@ -165,5 +197,84 @@ describe('queryDatabase Security Tests', () => {
       expect(Array.isArray(results)).toBe(true)
     })
   })
+
+  describe('Concurrent Queries', () => {
+    it('handles concurrent queries safely', async () => {
+      mockDb.client.prepare.mockReturnValue({
+        iterate: () => [{ id: 1 }]
+      })
+
+      const queries = Array.from({ length: 10 }, () =>
+        queryDatabase('SELECT * FROM global_snapshots LIMIT 1')
+      )
+
+      const results = await Promise.all(queries)
+      expect(results).toHaveLength(10)
+      results.forEach(([data, error]) => {
+        expect(error).toBe('')
+        expect(Array.isArray(data)).toBe(true)
+      })
+    })
+
+  })
+
+  describe('Edge Cases', () => {
+    it('handles whitespace-only string', () => {
+      const [results, error] = queryDatabase('   \n\t  ')
+      expect(results).toEqual([])
+      // After trim, empty string is rejected as non-SELECT
+      expect(error).toBeTruthy()
+    })
+
+    it('handles query with special unicode characters', () => {
+      const [results, error] = queryDatabase('SELECT * FROM global_snapshots WHERE id = "测试"')
+      // Should either succeed or fail validation, not crash
+      expect(Array.isArray(results)).toBe(true)
+    })
+
+    it('handles query with null bytes', () => {
+      const queryWithNull = 'SELECT * FROM global_snapshots\0 WHERE id = 1'
+      const [results, error] = queryDatabase(queryWithNull)
+      // Should handle gracefully
+      expect(Array.isArray(results)).toBe(true)
+    })
+
+    it('handles query results with null values', () => {
+      mockDb.client.prepare.mockReturnValue({
+        iterate: () => [{ id: 1, name: null, value: undefined }]
+      })
+      
+      const [results, error] = queryDatabase('SELECT * FROM global_snapshots')
+      expect(error).toBe('')
+      expect(Array.isArray(results)).toBe(true)
+      expect(results.length).toBe(1)
+    })
+  })
+
+  describe('Encoded Payload Attacks', () => {
+    it('rejects URL-encoded SQL injection attempts', () => {
+      const encoded = 'SELECT%20*%20FROM%20settings%3B%20DROP%20TABLE%20settings'
+      const decoded = decodeURIComponent(encoded)
+      const [results, error] = queryDatabase(decoded)
+      expect(results).toEqual([])
+      expect(error).toContain('Dangerous SQL keywords')
+    })
+
+    it('rejects double-encoded payloads', () => {
+      const doubleEncoded = encodeURIComponent(encodeURIComponent('DROP TABLE settings'))
+      const decoded = decodeURIComponent(decodeURIComponent(doubleEncoded))
+      const [results, error] = queryDatabase(`SELECT * FROM global_snapshots; ${decoded}`)
+      expect(results).toEqual([])
+      expect(error).toContain('Dangerous SQL keywords')
+    })
+
+    it('rejects comment-based obfuscation', () => {
+      const withComments = 'SELECT/*comment*/ * FROM global_snapshots'
+      const [results, error] = queryDatabase(withComments)
+      expect(results).toEqual([])
+      expect(error).toContain('SQL comments')
+    })
+  })
+>>>>>>> e402cf9 (refactor: remove duplicates, reorganize tests, optimize code)
 })
 

@@ -28,6 +28,10 @@ let ipcHandlersRegistered = false
 let systemMonitor: ISystemMonitor | null = null
 let sharedProcessTracker: ProcessTracker | null = null
 
+function validateSettingKey(key: unknown): key is string {
+  return typeof key === 'string' && /^[a-zA-Z0-9_-]+$/.test(key) && key.length <= 100
+}
+
 export async function startApp(): Promise<void> {
   registerProcessSignalHandlers()
 
@@ -58,7 +62,9 @@ export async function startApp(): Promise<void> {
     ipcMain.handle('network:getPublicIP', async () => {
       return await geoLocationService.getPublicIP()
     })
-    ipcMain.handle('network:getInterfaces', async () => getInterfaceSelection())
+    const getInterfaces = () => getInterfaceSelection()
+    
+    ipcMain.handle('network:getInterfaces', getInterfaces)
     ipcMain.handle('network:selectInterface', async (_event, interfaceNames: unknown) => {
       if (!Array.isArray(interfaceNames) || interfaceNames.length > 100) {
         logger.error('Invalid interface names parameter', { interfaceNames })
@@ -66,15 +72,15 @@ export async function startApp(): Promise<void> {
       }
       // Additional validation happens in updateAnalyzerInterfaces
       await updateAnalyzerInterfaces(interfaceNames as string[])
-      return getInterfaceSelection()
+      return getInterfaces()
     })
     ipcMain.handle('network:startCapture', async () => {
       await startAnalyzer()
-      return getInterfaceSelection()
+      return getInterfaces()
     })
     ipcMain.handle('network:stopCapture', async () => {
       stopAnalyzer()
-      return getInterfaceSelection()
+      return getInterfaces()
     })
     ipcMain.handle('network:queryDatabase', async (_event, sql: unknown) => {
       if (typeof sql !== 'string') {
@@ -86,7 +92,7 @@ export async function startApp(): Promise<void> {
     })
     ipcMain.handle('set-value', async (_event, key: string, value: string) => {
       // Validate key to prevent path traversal
-      if (typeof key !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(key) || key.length > 100) {
+      if (!validateSettingKey(key)) {
         logger.error('Invalid setting key', { key })
         throw new Error('Invalid setting key')
       }
@@ -131,7 +137,7 @@ export async function startApp(): Promise<void> {
 
     ipcMain.handle('get-value', async (_event, key: string) => {
       // Validate key to prevent path traversal
-      if (typeof key !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(key) || key.length > 100) {
+      if (!validateSettingKey(key)) {
         logger.error('Invalid setting key', { key })
         return null
       }
