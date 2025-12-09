@@ -1,11 +1,24 @@
 import { CardContent, CardHeader, Card, CardTitle } from './ui/card'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from './ui/button'
 import Excel from 'exceljs'
 import FileSaver from 'file-saver'
 import { Bounce, ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { Database, Download, MoveRight } from 'lucide-react'
+
+async function fetchTables(
+  setTables: React.Dispatch<React.SetStateAction<string[]>>
+): Promise<void> {
+  console.log('Fetching table names from database...')
+  const [tableNames, error_message] = await window.api.queryDatabase(
+    "SELECT name FROM sqlite_master WHERE type='table'"
+  )
+  console.log('Received table names:', tableNames, 'Error message:', error_message)
+  if (!error_message && Array.isArray(tableNames)) {
+    setTables((tableNames as { name: string }[]).map((table) => table.name))
+  }
+}
 
 async function exportReports(sqlQuery: string): Promise<void> {
   if (!sqlQuery || sqlQuery.trim() === '') {
@@ -46,9 +59,13 @@ async function exportReports(sqlQuery: string): Promise<void> {
     }
   }
 }
-
 function ExportReports({ darkMode }: { darkMode: boolean }): React.JSX.Element {
   const [inputValue, setInputValue] = useState('')
+  const [tables, setTables] = useState(Array<string>())
+
+  useEffect(() => {
+    fetchTables(setTables)
+  }, [])
 
   return (
     <Card className="flex flex-col">
@@ -63,12 +80,10 @@ function ExportReports({ darkMode }: { darkMode: boolean }): React.JSX.Element {
       <CardContent className="flex-1 overflow-auto no-scrollbar pr-2">
         <div className="w-full mb-4 border border-default-medium rounded-base bg-neutral-secondary-medium shadow-xs">
           <div className="px-4 py-2 bg-neutral-secondary-medium rounded-t-base">
-            <label htmlFor="comment" className="sr-only">
-              SELECT * FROM application_snapshots
-            </label>
             <textarea
+              title={tables.join('\n')}
               id="comment"
-              className="block w-full px-0 text-sm text-heading bg-neutral-secondary-medium border-0 focus:ring-0 placeholder:text-body"
+              className="block w-full px-0 text-sm text-heading bg-neutral-secondary-medium border-0 focus:ring-0"
               placeholder="Enter your query here..."
               required
               onChange={(e) => setInputValue(e.target.value)}
