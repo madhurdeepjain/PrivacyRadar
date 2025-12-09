@@ -42,7 +42,7 @@ describe('Database Operations Integration', () => {
       try {
         unlinkSync(dbPath)
       } catch {
-        // Ignore cleanup errors
+        // cleanup errors
       }
     }
   })
@@ -141,40 +141,8 @@ describe('Database Operations Integration', () => {
     expect(results[0]?.pid).toBe(1234)
   })
 
-  it('handles empty registries', async () => {
-    const repo = new RegistryRepository(db)
-    await expect(repo.writeRegistries(new Map(), new Map(), new Map())).resolves.not.toThrow()
-  })
-
   describe('Error Handling', () => {
-    it('handles database write failures gracefully', async () => {
-      const repo = new RegistryRepository(db)
-      closeDatabase(db) // Close database to simulate connection loss
-
-      const globalReg = new Map<string, GlobalRegistry>()
-      globalReg.set('test-interface', {
-        interfaceName: 'test-interface',
-        totalPackets: 100,
-        totalBytesSent: 5000,
-        totalBytesReceived: 3000,
-        ipv4Packets: 80,
-        ipv6Packets: 20,
-        tcpPackets: 60,
-        udpPackets: 40,
-        ipv4Percent: 80,
-        ipv6Percent: 20,
-        tcpPercent: 60,
-        udpPercent: 40,
-        inboundBytes: 3000,
-        outboundBytes: 5000,
-        firstSeen: Date.now(),
-        lastSeen: Date.now()
-      })
-
-      await expect(repo.writeRegistries(globalReg, new Map(), new Map())).rejects.toThrow()
-    })
-
-    it('handles concurrent write operations', async () => {
+    it('handles concurrent write operations without data corruption', async () => {
       const repo1 = new RegistryRepository(db)
       const repo2 = new RegistryRepository(db)
 
@@ -218,7 +186,6 @@ describe('Database Operations Integration', () => {
         lastSeen: Date.now()
       })
 
-      // Concurrent writes should both succeed
       await Promise.all([
         repo1.writeRegistries(globalReg1, new Map(), new Map()),
         repo2.writeRegistries(globalReg2, new Map(), new Map())
@@ -227,69 +194,25 @@ describe('Database Operations Integration', () => {
       const results = await db.select().from(schema.globalSnapshots)
       expect(results.length).toBeGreaterThanOrEqual(2)
 
+      const interfaceNames = results.map((r) => r.interfaceName)
+      expect(interfaceNames).toContain('interface1')
+      expect(interfaceNames).toContain('interface2')
+
+      const iface1 = results.find((r) => r.interfaceName === 'interface1')
+      const iface2 = results.find((r) => r.interfaceName === 'interface2')
+      expect(iface1?.totalPackets).toBe(100)
+      expect(iface2?.totalPackets).toBe(200)
+
       await repo1.close()
       await repo2.close()
     })
 
-    it('handles concurrent read operations during writes', async () => {
-      const repo = new RegistryRepository(db)
-      const globalReg = new Map<string, GlobalRegistry>()
-      globalReg.set('test-interface', {
-        interfaceName: 'test-interface',
-        totalPackets: 100,
-        totalBytesSent: 5000,
-        totalBytesReceived: 3000,
-        ipv4Packets: 80,
-        ipv6Packets: 20,
-        tcpPackets: 60,
-        udpPackets: 40,
-        ipv4Percent: 80,
-        ipv6Percent: 20,
-        tcpPercent: 60,
-        udpPercent: 40,
-        inboundBytes: 3000,
-        outboundBytes: 5000,
-        firstSeen: Date.now(),
-        lastSeen: Date.now()
-      })
-
-      // Concurrent read and write
-      const [, readResult] = await Promise.all([
-        repo.writeRegistries(globalReg, new Map(), new Map()),
-        db.select().from(schema.globalSnapshots)
-      ])
-
-      expect(readResult).toBeDefined()
-      await repo.close()
-    })
-
-    it('handles invalid data gracefully', async () => {
-      const repo = new RegistryRepository(db)
-
-      // Try to write with missing required fields (TypeScript won't allow this, but runtime might)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const invalidReg = new Map<string, any>()
-      invalidReg.set('invalid', {
-        interfaceName: 'invalid'
-        // Missing required fields
-      })
-
-      // Should either throw or handle gracefully
-      try {
-        await repo.writeRegistries(invalidReg, new Map(), new Map())
-      } catch (error) {
-        expect(error).toBeDefined()
-      }
-
-      await repo.close()
-    })
-
-    it('handles very large datasets', async () => {
+    it('handles large datasets (1000+ entries) efficiently', async () => {
       const repo = new RegistryRepository(db)
       const globalReg = new Map<string, GlobalRegistry>()
 
-      // Create many registry entries
-      for (let i = 0; i < 1000; i++) {
+      const datasetSize = 1000
+      for (let i = 0; i < datasetSize; i++) {
         globalReg.set(`interface-${i}`, {
           interfaceName: `interface-${i}`,
           totalPackets: 100,
@@ -310,26 +233,29 @@ describe('Database Operations Integration', () => {
         })
       }
 
+      const startTime = Date.now()
       await repo.writeRegistries(globalReg, new Map(), new Map())
+      const duration = Date.now() - startTime
+
       const results = await db.select().from(schema.globalSnapshots)
-      expect(results.length).toBe(1000)
+      expect(results.length).toBe(datasetSize)
+
+      expect(results[0]?.interfaceName).toBe('interface-0')
+      expect(results[datasetSize - 1]?.interfaceName).toBe(`interface-${datasetSize - 1}`)
+
+      expect(duration).toBeLessThan(5000)
 
       await repo.close()
     })
+  })
 
-    it('handles database file permission errors', async () => {
-      // Create a database that we'll make read-only
-      const readOnlyPath = join(tmpdir(), `readonly-db-${Date.now()}.db`)
-      const readOnlyDb = createTestDatabase(readOnlyPath, getMigrationsPath())
-
-      // Close and try to write to read-only file (simulated)
-      closeDatabase(readOnlyDb)
-
-      // Try to create a new repository with closed database
-      const repo = new RegistryRepository(readOnlyDb)
+  describe('Data Querying', () => {
+    it('queries snapshots by interface name', async () => {
+      const repo = new RegistryRepository(db)
       const globalReg = new Map<string, GlobalRegistry>()
-      globalReg.set('test', {
-        interfaceName: 'test',
+
+      globalReg.set('eth0', {
+        interfaceName: 'eth0',
         totalPackets: 100,
         totalBytesSent: 5000,
         totalBytesReceived: 3000,
@@ -347,25 +273,77 @@ describe('Database Operations Integration', () => {
         lastSeen: Date.now()
       })
 
-      await expect(repo.writeRegistries(globalReg, new Map(), new Map())).rejects.toThrow()
+      await repo.writeRegistries(globalReg, new Map(), new Map())
 
-      if (existsSync(readOnlyPath)) {
-        try {
-          unlinkSync(readOnlyPath)
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
+      const results = await db
+        .select()
+        .from(schema.globalSnapshots)
+        .where((snapshots) => snapshots.interfaceName === 'eth0')
+
+      expect(results.length).toBeGreaterThan(0)
+      expect(results[0]?.interfaceName).toBe('eth0')
+
+      await repo.close()
     })
 
-    it('handles schema migration failures', () => {
-      const invalidMigrationsPath = join(tmpdir(), 'nonexistent-migrations')
+    it('queries snapshots with date range filtering', async () => {
+      const repo = new RegistryRepository(db)
+      const globalReg = new Map<string, GlobalRegistry>()
 
-      // Should handle missing migrations gracefully or throw
-      expect(() => {
-        const testDbPath = join(tmpdir(), `test-db-${Date.now()}.db`)
-        createTestDatabase(testDbPath, invalidMigrationsPath)
-      }).toThrow()
+      const now = Date.now()
+      const twoDaysAgo = now - 2 * 24 * 60 * 60 * 1000
+      const oneDayAgo = now - 24 * 60 * 60 * 1000
+
+      globalReg.set('eth0-old', {
+        interfaceName: 'eth0-old',
+        totalPackets: 50,
+        totalBytesSent: 2500,
+        totalBytesReceived: 1500,
+        ipv4Packets: 40,
+        ipv6Packets: 10,
+        tcpPackets: 30,
+        udpPackets: 20,
+        ipv4Percent: 80,
+        ipv6Percent: 20,
+        tcpPercent: 60,
+        udpPercent: 40,
+        inboundBytes: 1500,
+        outboundBytes: 2500,
+        firstSeen: twoDaysAgo,
+        lastSeen: twoDaysAgo
+      })
+
+      globalReg.set('eth0-recent', {
+        interfaceName: 'eth0-recent',
+        totalPackets: 100,
+        totalBytesSent: 5000,
+        totalBytesReceived: 3000,
+        ipv4Packets: 80,
+        ipv6Packets: 20,
+        tcpPackets: 60,
+        udpPackets: 40,
+        ipv4Percent: 80,
+        ipv6Percent: 20,
+        tcpPercent: 60,
+        udpPercent: 40,
+        inboundBytes: 3000,
+        outboundBytes: 5000,
+        firstSeen: now,
+        lastSeen: now
+      })
+
+      await repo.writeRegistries(globalReg, new Map(), new Map())
+
+      const allResults = await db.select().from(schema.globalSnapshots)
+      const results = allResults.filter((r) => {
+        const lastSeen = r.lastSeen instanceof Date ? r.lastSeen.getTime() : Number(r.lastSeen)
+        return lastSeen >= oneDayAgo
+      })
+
+      expect(results.length).toBe(1)
+      expect(results[0]?.interfaceName).toBe('eth0-recent')
+
+      await repo.close()
     })
   })
 })

@@ -31,27 +31,38 @@ const pinoLogger = pino({
 
 // Helper function to normalize logger arguments
 // Supports both: logger.info(msg, obj) and logger.info(obj, msg)
+// Wraps all calls in try-catch to handle thread-stream worker crashes gracefully
 function createLogMethod(level: 'info' | 'warn' | 'error' | 'debug') {
   return (msgOrObj: string | object, objOrMsg?: object | string | unknown) => {
-    if (typeof msgOrObj === 'string') {
-      // Pattern: logger.info('message', { data }) or logger.info('message', error)
-      if (objOrMsg !== undefined) {
-        if (typeof objOrMsg === 'object') {
-          pinoLogger[level](objOrMsg, msgOrObj)
+    try {
+      if (typeof msgOrObj === 'string') {
+        // Pattern: logger.info('message', { data }) or logger.info('message', error)
+        if (objOrMsg !== undefined) {
+          if (typeof objOrMsg === 'object') {
+            pinoLogger[level](objOrMsg, msgOrObj)
+          } else {
+            // Handle error or other types by wrapping in object
+            pinoLogger[level]({ data: objOrMsg }, msgOrObj)
+          }
         } else {
-          // Handle error or other types by wrapping in object
-          pinoLogger[level]({ data: objOrMsg }, msgOrObj)
+          pinoLogger[level](msgOrObj)
         }
       } else {
-        pinoLogger[level](msgOrObj)
+        // Pattern: logger.info({ data }, 'message')
+        if (objOrMsg && typeof objOrMsg === 'string') {
+          pinoLogger[level](msgOrObj, objOrMsg)
+        } else {
+          pinoLogger[level](msgOrObj)
+        }
       }
-    } else {
-      // Pattern: logger.info({ data }, 'message')
-      if (objOrMsg && typeof objOrMsg === 'string') {
-        pinoLogger[level](msgOrObj, objOrMsg)
-      } else {
-        pinoLogger[level](msgOrObj)
+    } catch (error) {
+      // Thread-stream worker may have exited (common in Electron)
+      // Silently ignore to prevent app crashes
+      if (error instanceof Error && error.message.includes('worker has exited')) {
+        return
       }
+      // Re-throw other errors
+      throw error
     }
   }
 }

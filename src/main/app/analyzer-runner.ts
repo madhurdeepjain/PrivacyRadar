@@ -16,7 +16,7 @@ import { Device, NetworkInterface, PacketMetadata } from '@shared/interfaces/com
 import { formatIPv6Address } from '@main/shared/utils/address-normalizer'
 import { getDatabase } from '@infra/db'
 import { RegistryRepository } from '@main/core/network/db-writer'
-import Database from 'better-sqlite3'
+import * as schema from '@infra/db/schema'
 
 let analyzer: NetworkAnalyzer | null = null
 let sharedProcessTracker: ProcessTracker | null = null
@@ -114,7 +114,6 @@ function validateInterfaceNamesArray(interfaceNames: unknown): interfaceNames is
     return false
   }
   if (interfaceNames.length > 100) {
-    // Prevent DoS with extremely large arrays
     return false
   }
   return interfaceNames.every((name) => validateInterfaceName(name))
@@ -128,7 +127,6 @@ function applySelectedInterfaces(deviceInfo: Device, interfaceNames?: string[]):
     return
   }
 
-  // Validate interface names array
   if (!validateInterfaceNamesArray(interfaceNames)) {
     throw new Error('Invalid interface names: must be an array of valid interface name strings')
   }
@@ -283,70 +281,78 @@ export function stopAnalyzer(): void {
   logger.info('Network analyzer stopped')
 }
 
-const ALLOWED_TABLES = ['global_snapshots', 'application_snapshots', 'process_snapshots']
-const DANGEROUS_KEYWORDS =
-  /UNION|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|TRUNCATE|REPLACE/i
+type QueryTable = 'global_snapshots' | 'application_snapshots' | 'process_snapshots'
 
-export function queryDatabase(sql: string): [unknown[], string] {
-  if (typeof sql !== 'string' || sql.length === 0) {
-    return [[], 'SQL query must be a non-empty string']
+interface QueryOptions {
+  table: QueryTable
+  limit?: number
+  offset?: number
+}
+
+export function queryDatabase(options: QueryOptions): [unknown[], string] {
+  if (!options || typeof options !== 'object') {
+    return [[], 'Invalid query options: must be an object']
   }
 
-  const trimmed = sql.trim()
+  const { table, limit = 1000, offset = 0 } = options
 
-  // Only allow SELECT statements
-  if (!trimmed.toUpperCase().startsWith('SELECT')) {
-    return [[], 'Only SELECT queries are allowed']
+  if (!['global_snapshots', 'application_snapshots', 'process_snapshots'].includes(table)) {
+    return [[], `Invalid table: ${table} is not accessible`]
   }
 
-  // Block dangerous keywords (check before FROM parsing)
-  if (DANGEROUS_KEYWORDS.test(trimmed)) {
-    return [[], 'Dangerous SQL keywords not allowed']
+  if (limit < 1 || limit > 10000) {
+    return [[], 'Limit must be between 1 and 10000']
   }
 
-  // Additional safety: prevent comments, multiple statements (check early)
-  if (trimmed.includes('--') || trimmed.includes('/*') || trimmed.includes(';')) {
-    return [[], 'SQL comments and multiple statements not allowed']
+  if (offset < 0) {
+    return [[], 'Offset must be non-negative']
   }
 
-  // Validate table name - extract FROM clause
-  const fromMatch = trimmed.match(/FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)/i)
-  if (!fromMatch) {
-    return [[], 'Invalid SQL syntax: FROM clause required']
-  }
-
-  const tableName = fromMatch[1]
-  if (!ALLOWED_TABLES.includes(tableName)) {
-    return [[], `Table '${tableName}' is not accessible`]
-  }
-
-  // Use existing database connection for performance
   const db = getDatabase()
   try {
-    // Access underlying better-sqlite3 client for raw SQL
-    const sqliteClient = (db as unknown as { client: InstanceType<typeof Database> }).client
-    const stmt = sqliteClient.prepare(trimmed)
-    return [Array.from(stmt.iterate()), '']
+    let query
+
+    if (table === 'global_snapshots') {
+      query = db.select().from(schema.globalSnapshots)
+    } else if (table === 'application_snapshots') {
+      query = db.select().from(schema.applicationSnapshots)
+    } else {
+      query = db.select().from(schema.processSnapshots)
+    }
+
+    query = query.limit(limit).offset(offset)
+
+    const results = query.all()
+    return [results, '']
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Query failed'
-    logger.error('Database query failed', { sql: trimmed.substring(0, 100), error: message })
+    logger.error('Database query failed', { table, error: message })
     return [[], message]
   }
 }
 
 export async function updateAnalyzerInterfaces(interfaceNames: string[] = []): Promise<void> {
-  // Validate input
   if (!validateInterfaceNamesArray(interfaceNames)) {
     throw new Error('Invalid interface names: must be an array of valid interface name strings')
   }
 
+  const LOCK_TIMEOUT_MS = 30000
+
   interfaceSwitchLock = (async () => {
+    let timeoutId: NodeJS.Timeout | null = null
     try {
-      // Wait for any previous interface update to complete
-      await interfaceSwitchLock
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Interface update timeout')), LOCK_TIMEOUT_MS)
+      })
+      await Promise.race([interfaceSwitchLock, timeoutPromise])
     } catch (error) {
-      // Previous update failed, but we continue with our update
-      logger.debug('Previous interface update failed, continuing with new update', { error })
+      if (error instanceof Error && error.message === 'Interface update timeout') {
+        logger.warn('Previous interface update timed out, proceeding with new update')
+      } else {
+        logger.debug('Previous interface update failed, continuing with new update', { error })
+      }
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId)
     }
 
     try {
@@ -394,6 +400,7 @@ export async function updateAnalyzerInterfaces(interfaceNames: string[] = []): P
             interfaces: previousSelection,
             error: restoreError
           })
+          throw restoreError
         }
 
         throw error

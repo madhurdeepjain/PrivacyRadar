@@ -10,7 +10,6 @@ import type {
   TCCEvent
 } from '../main/shared/interfaces/common'
 
-// Custom APIs for renderer
 const api: API = {
   onNetworkData: (callback: (data: PacketMetadata) => void) => {
     ipcRenderer.on('network-data', (_event, data) => {
@@ -55,8 +54,12 @@ const api: API = {
   stopCapture: async (): Promise<InterfaceSelection> => {
     return ipcRenderer.invoke('network:stopCapture')
   },
-  queryDatabase: async (sql: string): Promise<[unknown[], string]> => {
-    return ipcRenderer.invoke('network:queryDatabase', sql)
+  queryDatabase: async (options: {
+    table: 'global_snapshots' | 'application_snapshots' | 'process_snapshots'
+    limit?: number
+    offset?: number
+  }): Promise<[unknown[], string]> => {
+    return ipcRenderer.invoke('network:queryDatabase', options)
   },
   setValue: async (key: string, value: string): Promise<void> => {
     return ipcRenderer.invoke('set-value', key, value)
@@ -72,7 +75,6 @@ const api: API = {
   }
 }
 
-// System Monitoring API
 const systemAPI: SystemAPI = {
   start: () => ipcRenderer.invoke('system:start'),
   stop: () => ipcRenderer.invoke('system:stop'),
@@ -90,9 +92,6 @@ const systemAPI: SystemAPI = {
   }
 }
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
@@ -102,10 +101,25 @@ if (process.contextIsolated) {
     console.error(error)
   }
 } else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.api = api
-  // @ts-ignore (define in dts)
-  window.systemAPI = systemAPI
+  ;(
+    window as Window & {
+      electron: typeof electronAPI
+      api: typeof api
+      systemAPI: typeof systemAPI
+    }
+  ).electron = electronAPI
+  ;(
+    window as Window & {
+      electron: typeof electronAPI
+      api: typeof api
+      systemAPI: typeof systemAPI
+    }
+  ).api = api
+  ;(
+    window as Window & {
+      electron: typeof electronAPI
+      api: typeof api
+      systemAPI: typeof systemAPI
+    }
+  ).systemAPI = systemAPI
 }

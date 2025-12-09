@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest'
 import { getDatabase } from '@infra/db'
+import * as schema from '@infra/db/schema'
 
 vi.mock('electron', () => ({
   app: {
@@ -29,8 +30,11 @@ vi.mock('@config/constants', () => ({
   REGISTRY_SNAPSHOT_INTERVAL_MS: 10000
 }))
 
-// Import after mocks
-let queryDatabase: (sql: string) => [unknown[], string]
+let queryDatabase: (options: {
+  table: 'global_snapshots' | 'application_snapshots' | 'process_snapshots'
+  limit?: number
+  offset?: number
+}) => [unknown[], string]
 
 beforeAll(async () => {
   const module = await import('@app/analyzer-runner')
@@ -38,249 +42,318 @@ beforeAll(async () => {
 })
 
 describe('queryDatabase Security Tests', () => {
-  const mockDb = {
-    client: {
-      prepare: vi.fn(() => ({
-        iterate: vi.fn(() => [])
-      }))
+  const createMockQueryBuilder = (
+    results: unknown[] = []
+  ): {
+    limit: ReturnType<typeof vi.fn>
+    offset: ReturnType<typeof vi.fn>
+    all: ReturnType<typeof vi.fn>
+  } => {
+    const queryBuilder = {
+      limit: vi.fn().mockReturnThis(),
+      offset: vi.fn().mockReturnThis(),
+      all: vi.fn().mockReturnValue(results)
+    }
+    return queryBuilder
+  }
+
+  const createMockDb = (
+    results: unknown[] = []
+  ): {
+    select: ReturnType<typeof vi.fn>
+  } => {
+    const queryBuilder = createMockQueryBuilder(results)
+    return {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue(queryBuilder)
+      })
     }
   }
 
   beforeEach(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(getDatabase).mockReturnValue(mockDb as any)
+    vi.clearAllMocks()
   })
 
   afterEach(() => {
     vi.clearAllMocks()
   })
 
-  describe('SQL Injection Prevention', () => {
-    it('rejects non-SELECT queries', () => {
-      const [results, error] = queryDatabase('DROP TABLE settings')
+  describe('Input Validation', () => {
+    it('rejects non-object input', () => {
+      // @ts-expect-error Testing invalid input
+      const [results, error] = queryDatabase(null)
       expect(results).toEqual([])
-      expect(error).toContain('Only SELECT queries are allowed')
-      expect(mockDb.client.prepare).not.toHaveBeenCalled()
+      expect(error).toContain('Invalid query options: must be an object')
     })
 
-    it('rejects INSERT queries', () => {
-      const [results, error] = queryDatabase('INSERT INTO settings VALUES (1, "test")')
+    it('rejects missing table', () => {
+      // @ts-expect-error Testing invalid input
+      const [results, error] = queryDatabase({})
       expect(results).toEqual([])
-      expect(error).toContain('Only SELECT queries are allowed')
+      expect(error).toContain('Invalid table')
     })
 
-    it('rejects UPDATE queries', () => {
-      const [results, error] = queryDatabase('UPDATE settings SET value = "hacked"')
+    it('rejects invalid table name', () => {
+      const [results, error] = queryDatabase({
+        // @ts-expect-error Testing invalid input
+        table: 'sqlite_master'
+      })
       expect(results).toEqual([])
-      expect(error).toContain('Only SELECT queries are allowed')
+      expect(error).toContain('not accessible')
     })
 
-    it('rejects DELETE queries', () => {
-      const [results, error] = queryDatabase('DELETE FROM settings')
-      expect(results).toEqual([])
-      expect(error).toContain('Only SELECT queries are allowed')
+    it('rejects restricted table names', () => {
+      const restrictedTables = ['settings', 'sqlite_master', 'sqlite_sequence', 'malicious_table']
+      restrictedTables.forEach((table) => {
+        const [results, error] = queryDatabase({
+          // @ts-expect-error Testing invalid input
+          table
+        })
+        expect(results).toEqual([])
+        expect(error).toContain('not accessible')
+      })
     })
 
-    it('blocks UNION attacks', () => {
-      const [results, error] = queryDatabase(
-        'SELECT * FROM global_snapshots UNION SELECT * FROM settings'
-      )
+    it('rejects limit below minimum', () => {
+      const [results, error] = queryDatabase({
+        table: 'global_snapshots',
+        limit: 0
+      })
       expect(results).toEqual([])
-      expect(error).toContain('Dangerous SQL keywords')
+      expect(error).toContain('Limit must be between 1 and 10000')
     })
 
-    it('blocks DROP statements even in SELECT context', () => {
-      const [results, error] = queryDatabase('SELECT * FROM global_snapshots; DROP TABLE settings')
+    it('rejects limit above maximum', () => {
+      const [results, error] = queryDatabase({
+        table: 'global_snapshots',
+        limit: 10001
+      })
       expect(results).toEqual([])
-      expect(error).toContain('Dangerous SQL keywords')
+      expect(error).toContain('Limit must be between 1 and 10000')
     })
 
-    it('blocks comments', () => {
-      // Use a query that won't match dangerous keywords but has a comment
-      const [results, error] = queryDatabase('SELECT id FROM global_snapshots -- malicious comment')
+    it('rejects negative offset', () => {
+      const [results, error] = queryDatabase({
+        table: 'global_snapshots',
+        offset: -1
+      })
       expect(results).toEqual([])
-      expect(error).toContain('SQL comments')
+      expect(error).toContain('Offset must be non-negative')
     })
 
-    it('blocks multi-statement attacks', () => {
-      const [results, error] = queryDatabase(
-        'SELECT * FROM global_snapshots; SELECT * FROM settings'
-      )
-      expect(results).toEqual([])
-      expect(error).toContain('multiple statements')
+    it('accepts valid options with defaults', () => {
+      const mockDb = createMockDb([{ id: 1, interfaceName: 'eth0' }])
+      vi.mocked(getDatabase).mockReturnValue(mockDb as never)
+
+      const [results, error] = queryDatabase({
+        table: 'global_snapshots'
+      })
+      expect(error).toBe('')
+      expect(results).toHaveLength(1)
+      expect(mockDb.select).toHaveBeenCalled()
     })
   })
 
   describe('Table Access Control', () => {
-    it('rejects queries on sqlite_master', () => {
-      const [results, error] = queryDatabase('SELECT * FROM sqlite_master')
-      expect(results).toEqual([])
-      expect(error).toContain('not accessible')
-    })
+    it.each([
+      ['global_snapshots', schema.globalSnapshots],
+      ['application_snapshots', schema.applicationSnapshots],
+      ['process_snapshots', schema.processSnapshots]
+    ])('allows queries on whitelisted table: %s', (table, tableSchema) => {
+      const mockResults = [{ id: 1, totalPackets: 100 }]
+      const mockDb = createMockDb(mockResults)
+      vi.mocked(getDatabase).mockReturnValue(mockDb as never)
 
-    it('rejects queries on settings table', () => {
-      const [results, error] = queryDatabase('SELECT * FROM settings')
-      expect(results).toEqual([])
-      expect(error).toContain('not accessible')
-    })
-
-    it('allows queries on global_snapshots', () => {
-      mockDb.client.prepare.mockReturnValue({
-        iterate: () => [{ id: 1, interfaceName: 'eth0' }]
+      const [results, error] = queryDatabase({
+        table: table as 'global_snapshots' | 'application_snapshots' | 'process_snapshots',
+        limit: 10,
+        offset: 0
       })
-      const [results, error] = queryDatabase('SELECT * FROM global_snapshots LIMIT 10')
+
       expect(error).toBe('')
-      expect(Array.isArray(results)).toBe(true)
-      expect(mockDb.client.prepare).toHaveBeenCalled()
+      expect(results).toEqual(mockResults)
+      expect(mockDb.select).toHaveBeenCalled()
+      const fromCall = mockDb.select().from
+      expect(fromCall).toHaveBeenCalledWith(tableSchema)
     })
 
-    it('allows queries on application_snapshots', () => {
-      mockDb.client.prepare.mockReturnValue({
-        iterate: () => []
-      })
-      const [results, error] = queryDatabase('SELECT appName FROM application_snapshots')
-      expect(error).toBe('')
-      expect(Array.isArray(results)).toBe(true)
-    })
+    it('uses correct table schema for each table type', () => {
+      const mockDb = createMockDb([])
+      vi.mocked(getDatabase).mockReturnValue(mockDb as never)
 
-    it('allows queries on process_snapshots', () => {
-      mockDb.client.prepare.mockReturnValue({
-        iterate: () => []
-      })
-      const [results, error] = queryDatabase('SELECT pid FROM process_snapshots WHERE pid > 1000')
-      expect(error).toBe('')
-      expect(Array.isArray(results)).toBe(true)
+      queryDatabase({ table: 'global_snapshots' })
+      expect(mockDb.select().from).toHaveBeenCalledWith(schema.globalSnapshots)
+
+      vi.clearAllMocks()
+      queryDatabase({ table: 'application_snapshots' })
+      expect(mockDb.select().from).toHaveBeenCalledWith(schema.applicationSnapshots)
+
+      vi.clearAllMocks()
+      queryDatabase({ table: 'process_snapshots' })
+      expect(mockDb.select().from).toHaveBeenCalledWith(schema.processSnapshots)
     })
   })
 
-  describe('Input Validation', () => {
-    it('rejects empty strings', () => {
-      const [results, error] = queryDatabase('')
-      expect(results).toEqual([])
-      expect(error).toContain('non-empty string')
+  describe('Limit and Offset', () => {
+    it('applies limit correctly', () => {
+      const mockDb = createMockDb([])
+      vi.mocked(getDatabase).mockReturnValue(mockDb as never)
+
+      queryDatabase({
+        table: 'global_snapshots',
+        limit: 500
+      })
+
+      const queryBuilder = mockDb.select().from(schema.globalSnapshots)
+      expect(queryBuilder.limit).toHaveBeenCalledWith(500)
     })
 
-    it('rejects non-string input', () => {
-      // @ts-expect-error Testing invalid input
-      const [results, error] = queryDatabase(null)
-      expect(results).toEqual([])
-      expect(error).toContain('non-empty string')
+    it('applies default limit of 1000', () => {
+      const mockDb = createMockDb([])
+      vi.mocked(getDatabase).mockReturnValue(mockDb as never)
+
+      queryDatabase({
+        table: 'global_snapshots'
+      })
+
+      const queryBuilder = mockDb.select().from(schema.globalSnapshots)
+      expect(queryBuilder.limit).toHaveBeenCalledWith(1000)
     })
 
-    it('rejects queries without FROM clause', () => {
-      const [results, error] = queryDatabase('SELECT 1')
+    it('applies offset correctly', () => {
+      const mockDb = createMockDb([])
+      vi.mocked(getDatabase).mockReturnValue(mockDb as never)
+
+      queryDatabase({
+        table: 'global_snapshots',
+        offset: 100
+      })
+
+      const queryBuilder = mockDb.select().from(schema.globalSnapshots)
+      expect(queryBuilder.offset).toHaveBeenCalledWith(100)
+    })
+
+    it('applies default offset of 0', () => {
+      const mockDb = createMockDb([])
+      vi.mocked(getDatabase).mockReturnValue(mockDb as never)
+
+      queryDatabase({
+        table: 'global_snapshots'
+      })
+
+      const queryBuilder = mockDb.select().from(schema.globalSnapshots)
+      expect(queryBuilder.offset).toHaveBeenCalledWith(0)
+    })
+
+    it('applies both limit and offset together', () => {
+      const mockDb = createMockDb([])
+      vi.mocked(getDatabase).mockReturnValue(mockDb as never)
+
+      queryDatabase({
+        table: 'global_snapshots',
+        limit: 50,
+        offset: 25
+      })
+
+      const queryBuilder = mockDb.select().from(schema.globalSnapshots)
+      expect(queryBuilder.limit).toHaveBeenCalledWith(50)
+      expect(queryBuilder.offset).toHaveBeenCalledWith(25)
+    })
+  })
+
+  describe('Query Execution', () => {
+    it('executes query and returns results', () => {
+      const mockResults = [
+        { id: 1, interfaceName: 'eth0', totalPackets: 100 },
+        { id: 2, interfaceName: 'wlan0', totalPackets: 200 }
+      ]
+      const mockDb = createMockDb(mockResults)
+      vi.mocked(getDatabase).mockReturnValue(mockDb as never)
+
+      const [results, error] = queryDatabase({
+        table: 'global_snapshots',
+        limit: 10
+      })
+
+      expect(error).toBe('')
+      expect(results).toEqual(mockResults)
+      const queryBuilder = mockDb.select().from(schema.globalSnapshots)
+      expect(queryBuilder.all).toHaveBeenCalled()
+    })
+
+    it('handles empty results', () => {
+      const mockDb = createMockDb([])
+      vi.mocked(getDatabase).mockReturnValue(mockDb as never)
+
+      const [results, error] = queryDatabase({
+        table: 'application_snapshots'
+      })
+
+      expect(error).toBe('')
       expect(results).toEqual([])
-      expect(error).toContain('FROM clause required')
     })
 
     it('handles query errors gracefully', () => {
-      mockDb.client.prepare.mockImplementation(() => {
-        throw new Error('SQL syntax error')
+      const mockDb = {
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            limit: vi.fn().mockReturnThis(),
+            offset: vi.fn().mockReturnThis(),
+            all: vi.fn().mockImplementation(() => {
+              throw new Error('Database connection failed')
+            })
+          })
+        })
+      }
+      vi.mocked(getDatabase).mockReturnValue(mockDb as never)
+
+      const [results, error] = queryDatabase({
+        table: 'process_snapshots'
       })
-      const [results, error] = queryDatabase(
-        'SELECT * FROM global_snapshots WHERE invalid_column = 1'
-      )
+
       expect(results).toEqual([])
-      expect(error).toContain('SQL syntax error')
+      expect(error).toContain('Database connection failed')
     })
   })
 
-  describe('Valid Queries', () => {
-    it('executes valid SELECT with WHERE clause', () => {
-      mockDb.client.prepare.mockReturnValue({
-        iterate: () => [{ id: 1 }]
+  describe('Security: No SQL Injection', () => {
+    it('does not accept SQL strings - only table names', () => {
+      const [results, error] = queryDatabase({
+        // @ts-expect-error Testing invalid input
+        table: "global_snapshots'; DROP TABLE settings; --"
       })
-      const [results, error] = queryDatabase(
-        'SELECT * FROM global_snapshots WHERE totalPackets > 100'
-      )
-      expect(error).toBe('')
-      expect(results).toHaveLength(1)
-    })
-
-    it('executes valid SELECT with LIMIT', () => {
-      mockDb.client.prepare.mockReturnValue({
-        iterate: () => []
-      })
-      const [results, error] = queryDatabase('SELECT * FROM application_snapshots LIMIT 10')
-      expect(error).toBe('')
-      expect(Array.isArray(results)).toBe(true)
-    })
-  })
-
-  describe('Concurrent Queries', () => {
-    it('handles concurrent queries safely', async () => {
-      mockDb.client.prepare.mockReturnValue({
-        iterate: () => [{ id: 1 }]
-      })
-
-      const queries = Array.from({ length: 10 }, () =>
-        queryDatabase('SELECT * FROM global_snapshots LIMIT 1')
-      )
-
-      const results = await Promise.all(queries)
-      expect(results).toHaveLength(10)
-      results.forEach(([data, error]) => {
-        expect(error).toBe('')
-        expect(Array.isArray(data)).toBe(true)
-      })
-    })
-  })
-
-  describe('Edge Cases', () => {
-    it('handles whitespace-only string', () => {
-      const [results, error] = queryDatabase('   \n\t  ')
       expect(results).toEqual([])
-      // After trim, empty string is rejected as non-SELECT
-      expect(error).toBeTruthy()
+      expect(error).toContain('not accessible')
     })
 
-    it('handles query with special unicode characters', () => {
-      const [results] = queryDatabase('SELECT * FROM global_snapshots WHERE id = "测试"')
-      // Should either succeed or fail validation, not crash
-      expect(Array.isArray(results)).toBe(true)
+    it('validates table name strictly', () => {
+      const maliciousInputs = [
+        "global_snapshots'; DROP TABLE settings; --",
+        'global_snapshots UNION SELECT * FROM settings',
+        'global_snapshots; DELETE FROM settings'
+      ]
+
+      maliciousInputs.forEach((malicious) => {
+        const [results, error] = queryDatabase({
+          // @ts-expect-error Testing invalid input
+          table: malicious
+        })
+        expect(results).toEqual([])
+        expect(error).toContain('not accessible')
+      })
     })
 
-    it('handles query with null bytes', () => {
-      const queryWithNull = 'SELECT * FROM global_snapshots\0 WHERE id = 1'
-      const [results] = queryDatabase(queryWithNull)
-      // Should handle gracefully
-      expect(Array.isArray(results)).toBe(true)
-    })
+    it('uses Drizzle ORM (no raw SQL)', () => {
+      const mockDb = createMockDb([])
+      vi.mocked(getDatabase).mockReturnValue(mockDb as never)
 
-    it('handles query results with null values', () => {
-      mockDb.client.prepare.mockReturnValue({
-        iterate: () => [{ id: 1, name: null, value: undefined }]
+      queryDatabase({
+        table: 'global_snapshots'
       })
 
-      const [results, error] = queryDatabase('SELECT * FROM global_snapshots')
-      expect(error).toBe('')
-      expect(Array.isArray(results)).toBe(true)
-      expect(results.length).toBe(1)
-    })
-  })
-
-  describe('Encoded Payload Attacks', () => {
-    it('rejects URL-encoded SQL injection attempts', () => {
-      const encoded = 'SELECT%20*%20FROM%20settings%3B%20DROP%20TABLE%20settings'
-      const decoded = decodeURIComponent(encoded)
-      const [results, error] = queryDatabase(decoded)
-      expect(results).toEqual([])
-      expect(error).toContain('Dangerous SQL keywords')
-    })
-
-    it('rejects double-encoded payloads', () => {
-      const doubleEncoded = encodeURIComponent(encodeURIComponent('DROP TABLE settings'))
-      const decoded = decodeURIComponent(decodeURIComponent(doubleEncoded))
-      const [results, error] = queryDatabase(`SELECT * FROM global_snapshots; ${decoded}`)
-      expect(results).toEqual([])
-      expect(error).toContain('Dangerous SQL keywords')
-    })
-
-    it('rejects comment-based obfuscation', () => {
-      const withComments = 'SELECT/*comment*/ * FROM global_snapshots'
-      const [results, error] = queryDatabase(withComments)
-      expect(results).toEqual([])
-      expect(error).toContain('SQL comments')
+      expect(mockDb.select).toHaveBeenCalled()
+      expect(mockDb.select().from).toHaveBeenCalledWith(schema.globalSnapshots)
+      expect(mockDb.select().from(schema.globalSnapshots).all).toHaveBeenCalled()
     })
   })
 })

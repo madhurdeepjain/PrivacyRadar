@@ -2,7 +2,6 @@ import '@testing-library/jest-dom/vitest'
 import { beforeEach, vi } from 'vitest'
 import type { API } from '../src/preload/preload'
 
-// Only setup window mocks if we're in a browser-like environment (jsdom)
 if (typeof window !== 'undefined') {
   const versions = {
     electron: '0.0.0-test',
@@ -41,7 +40,6 @@ if (typeof window !== 'undefined') {
     writable: true
   })
 
-  // Mock systemAPI for SystemMonitor component
   Object.defineProperty(window, 'systemAPI', {
     value: {
       onEvent: vi.fn(),

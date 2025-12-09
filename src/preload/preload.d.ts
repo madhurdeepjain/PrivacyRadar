@@ -19,7 +19,11 @@ export interface API {
   selectNetworkInterface: (interfaceNames: string[]) => Promise<InterfaceSelection>
   startCapture: () => Promise<InterfaceSelection>
   stopCapture: () => Promise<InterfaceSelection>
-  queryDatabase: (sql: string) => Promise<[unknown[], string]>
+  queryDatabase: (options: {
+    table: 'global_snapshots' | 'application_snapshots' | 'process_snapshots'
+    limit?: number
+    offset?: number
+  }) => Promise<[unknown[], string]>
   setValue: (key: string, value: string) => Promise<void>
   getValue: (key: string) => Promise<string>
   getGeoLocation: (ip: string) => Promise<GeoLocationData>

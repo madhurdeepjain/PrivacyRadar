@@ -2,7 +2,7 @@ import { app, ipcMain } from 'electron'
 import { electronApp } from '@electron-toolkit/utils'
 import { logger } from '@infra/logging'
 import { runMigrations } from '@infra/db/migrate'
-import { getDatabase } from '@infra/db'
+import { getDatabase, closeDatabase } from '@infra/db'
 import { createMainWindow } from './window-manager'
 import { GeoLocationService } from '../core/network/geo-location'
 import fs from 'fs'
@@ -40,19 +40,15 @@ export async function startApp(): Promise<void> {
   electronApp.setAppUserModelId('com.privacyradar')
   registerAppLifecycleHandlers(createMainWindow)
 
-  // Register IPC handlers BEFORE creating the window to avoid race conditions
-  // The renderer may call these handlers immediately on mount
   if (!ipcHandlersRegistered) {
     const userDataPath = app.getPath('userData')
     const filePath = path.join(userDataPath, 'values.json')
     const geoLocationService = new GeoLocationService()
     ipcMain.handle('network:getGeoLocation', async (_event, ip: unknown) => {
       if (typeof ip !== 'string' || ip.length === 0 || ip.length > 45) {
-        // IPv6 addresses can be up to 45 characters
         logger.error('Invalid IP address parameter', { ip })
         throw new Error('Invalid IP address: must be a non-empty string with at most 45 characters')
       }
-      // Basic IP format validation (allows IPv4 and IPv6)
       if (!/^[0-9a-fA-F:.]+$/.test(ip)) {
         logger.error('Invalid IP address format', { ip })
         throw new Error('Invalid IP address format')
@@ -70,7 +66,6 @@ export async function startApp(): Promise<void> {
         logger.error('Invalid interface names parameter', { interfaceNames })
         throw new Error('Invalid interface names: must be an array with at most 100 elements')
       }
-      // Additional validation happens in updateAnalyzerInterfaces
       await updateAnalyzerInterfaces(interfaceNames as string[])
       return getInterfaces()
     })
@@ -82,16 +77,19 @@ export async function startApp(): Promise<void> {
       stopAnalyzer()
       return getInterfaces()
     })
-    ipcMain.handle('network:queryDatabase', async (_event, sql: unknown) => {
-      if (typeof sql !== 'string') {
-        logger.error('Invalid SQL query parameter', { sql })
-        throw new Error('Invalid SQL query: must be a string')
+    ipcMain.handle('network:queryDatabase', async (_event, options: unknown) => {
+      if (!options || typeof options !== 'object' || !('table' in options)) {
+        logger.error('Invalid query options parameter', { options })
+        throw new Error('Invalid query options: must be an object with table property')
       }
-      // Additional validation happens in queryDatabase function
-      return queryDatabase(sql)
+      const validatedOptions = {
+        table: options.table as 'global_snapshots' | 'application_snapshots' | 'process_snapshots',
+        limit: 'limit' in options ? (options.limit as number) : undefined,
+        offset: 'offset' in options ? (options.offset as number) : undefined
+      }
+      return queryDatabase(validatedOptions)
     })
     ipcMain.handle('set-value', async (_event, key: string, value: string) => {
-      // Validate key to prevent path traversal
       if (!validateSettingKey(key)) {
         logger.error('Invalid setting key', { key })
         throw new Error('Invalid setting key')
@@ -120,12 +118,9 @@ export async function startApp(): Promise<void> {
 
         values[key] = value
 
-        // Ensure directory exists before writing (idempotent - safe for concurrent calls)
         const dirPath = path.dirname(filePath)
         await fs.promises.mkdir(dirPath, { recursive: true })
 
-        // Atomic write: use unique temp filename to avoid conflicts in concurrent writes
-        // Use timestamp + random to ensure uniqueness
         const tmpPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).substring(7)}`
         await fs.promises.writeFile(tmpPath, JSON.stringify(values), 'utf8')
         await fs.promises.rename(tmpPath, filePath)
@@ -136,7 +131,6 @@ export async function startApp(): Promise<void> {
     })
 
     ipcMain.handle('get-value', async (_event, key: string) => {
-      // Validate key to prevent path traversal
       if (!validateSettingKey(key)) {
         logger.error('Invalid setting key', { key })
         return null
@@ -149,7 +143,6 @@ export async function startApp(): Promise<void> {
         const data = await fs.promises.readFile(filePath, 'utf8')
         const values = JSON.parse(data)
 
-        // Validate parsed structure
         if (typeof values !== 'object' || values === null || Array.isArray(values)) {
           logger.warn('Corrupted settings file', { filePath })
           return null
@@ -162,7 +155,6 @@ export async function startApp(): Promise<void> {
       }
     })
 
-    // System Monitor handlers
     ipcMain.handle('system:start', () => {
       logger.info('System monitor start requested by user')
       systemMonitor?.start()
@@ -201,16 +193,12 @@ export async function startApp(): Promise<void> {
   const mainWindow = createMainWindow()
   setMainWindow(mainWindow)
 
-  // Create shared ProcessTracker for Linux (used by both NetworkAnalyzer and LinuxSystemMonitor)
-  // This avoids duplicate polling and process caching
   if (process.platform === 'linux') {
     sharedProcessTracker = new ProcessTracker()
     setSharedProcessTracker(sharedProcessTracker)
     logger.info('Created shared ProcessTracker for Linux')
   }
 
-  // Initialize System Monitor (platform-specific)
-  // Pass shared ProcessTracker to Linux monitor
   systemMonitor = createSystemMonitor(mainWindow, sharedProcessTracker || undefined)
 
   if (!isSystemMonitoringSupported()) {
@@ -231,5 +219,6 @@ export function shutdownApp(): void {
   stopAnalyzer()
   systemMonitor?.stop()
   systemMonitor = null
+  closeDatabase()
   app.quit()
 }

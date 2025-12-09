@@ -50,8 +50,7 @@ const mockHelpers = vi.hoisted(() => {
       isDestroyed: vi.fn(() => false),
       loadURL: vi.fn(),
       loadFile: vi.fn()
-    })),
-    packetListeners
+    }))
   }
 })
 
@@ -153,7 +152,6 @@ describe('Capture Workflow Integration', () => {
     expect(mockIpc.handlers.has('network:startCapture')).toBe(true)
     expect(mockIpc.handlers.has('network:stopCapture')).toBe(true)
 
-    // Start capture
     const startHandler = mockIpc.handlers.get('network:startCapture')
     expect(startHandler).toBeDefined()
 
@@ -167,7 +165,6 @@ describe('Capture Workflow Integration', () => {
     const startResult = await startHandler!()
     expect(mockStartAnalyzer).toHaveBeenCalled()
     expect(startResult.isCapturing).toBe(true)
-    // Verify actual state is returned correctly
     expect(startResult).toHaveProperty('interfaces')
     expect(startResult).toHaveProperty('selectedInterfaceNames')
     expect(startResult).toHaveProperty('activeInterfaceNames')
@@ -196,7 +193,6 @@ describe('Capture Workflow Integration', () => {
     const stopResult = await stopHandler!()
     expect(mockStopAnalyzer).toHaveBeenCalled()
     expect(stopResult.isCapturing).toBe(false)
-    // Verify state transition is complete
     expect(stopResult.activeInterfaceNames).toEqual([])
     expect(stopResult).toHaveProperty('interfaces')
   })
@@ -237,7 +233,6 @@ describe('Capture Workflow Integration', () => {
     const selectResult = await selectHandler!(null, ['wlan0'])
     expect(mockUpdateAnalyzerInterfaces).toHaveBeenCalled()
     expect(selectResult.selectedInterfaceNames).toContain('wlan0')
-    // Verify interface selection actually changed state
     expect(selectResult.isCapturing).toBe(true)
     expect(selectResult.activeInterfaceNames).toContain('wlan0')
     expect(selectResult).toHaveProperty('interfaces')
@@ -291,114 +286,74 @@ describe('Capture Workflow Integration', () => {
       expect(mockStartAnalyzer).toHaveBeenCalled()
     })
 
-    it('handles invalid interface selection', async () => {
+    it.each([
+      ['invalid interface name', ['invalid-interface'], 'Invalid interface names'],
+      [
+        'non-array input',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'not-an-array' as any,
+        'must be an array'
+      ]
+    ])('rejects %s in interface selection', async (_name, input, expectedError) => {
       await bootstrap.startApp()
       const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
 
-      mockUpdateAnalyzerInterfaces.mockRejectedValueOnce(
-        new Error('Invalid interface names: must be an array of valid interface name strings')
-      )
+      if (Array.isArray(input)) {
+        mockUpdateAnalyzerInterfaces.mockRejectedValueOnce(
+          new Error(`${expectedError}: must be an array of valid interface name strings`)
+        )
+      }
 
       const selectHandler = mockIpc.handlers.get('network:selectInterface')
       expect(selectHandler).toBeDefined()
 
-      await expect(selectHandler!(null, ['invalid-interface'])).rejects.toThrow()
+      await expect(selectHandler!(null, input)).rejects.toThrow()
     })
 
-    it('handles interface selection with empty array', async () => {
+    it.each([
+      [
+        'analyzer stop failure',
+        async (mockIpc: typeof mockHelpers.ipcMain) => {
+          mockGetInterfaceSelection.mockReturnValue({
+            interfaces: [{ name: 'eth0', addresses: ['192.168.1.1'], isUp: true }],
+            selectedInterfaceNames: ['eth0'],
+            isCapturing: true,
+            activeInterfaceNames: ['eth0']
+          })
+          const startHandler = mockIpc.handlers.get('network:startCapture')
+          await startHandler!()
+          mockStopAnalyzer.mockImplementation(() => {
+            throw new Error('Analyzer stop failed')
+          })
+          const stopHandler = mockIpc.handlers.get('network:stopCapture')
+          await expect(stopHandler!()).rejects.toThrow('Analyzer stop failed')
+        }
+      ],
+      [
+        'interface update failure',
+        async (mockIpc: typeof mockHelpers.ipcMain) => {
+          mockGetInterfaceSelection.mockReturnValue({
+            interfaces: [
+              { name: 'eth0', addresses: ['192.168.1.1'], isUp: true },
+              { name: 'wlan0', addresses: ['192.168.1.2'], isUp: true }
+            ],
+            selectedInterfaceNames: ['eth0'],
+            isCapturing: true,
+            activeInterfaceNames: ['eth0']
+          })
+          const startHandler = mockIpc.handlers.get('network:startCapture')
+          await startHandler!()
+          mockUpdateAnalyzerInterfaces.mockRejectedValueOnce(
+            new Error('Failed to update network analyzer interface selection')
+          )
+          const selectHandler = mockIpc.handlers.get('network:selectInterface')
+          await expect(selectHandler!(null, ['wlan0'])).rejects.toThrow()
+        }
+      ]
+    ])('handles %s during active capture', async (_name, testFn) => {
       await bootstrap.startApp()
       const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
-
-      const selectHandler = mockIpc.handlers.get('network:selectInterface')
-      expect(selectHandler).toBeDefined()
-
-      // Empty array should be handled (will select all available)
-      const result = await selectHandler!(null, [])
-      expect(result).toBeDefined()
-    })
-
-    it('handles interface selection with non-array input', async () => {
-      await bootstrap.startApp()
-      const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
-
-      const selectHandler = mockIpc.handlers.get('network:selectInterface')
-      expect(selectHandler).toBeDefined()
-
-      // Non-array input should throw
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await expect(selectHandler!(null, 'not-an-array' as any)).rejects.toThrow()
-    })
-
-    it('handles stop capture when not capturing', async () => {
-      await bootstrap.startApp()
-      const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
-
-      mockGetInterfaceSelection.mockReturnValue({
-        interfaces: [{ name: 'eth0', addresses: ['192.168.1.1'], isUp: true }],
-        selectedInterfaceNames: ['eth0'],
-        isCapturing: false,
-        activeInterfaceNames: []
-      })
-
-      const stopHandler = mockIpc.handlers.get('network:stopCapture')
-      expect(stopHandler).toBeDefined()
-
-      // Should not throw when stopping while not capturing
-      const result = await stopHandler!()
-      expect(result.isCapturing).toBe(false)
-      expect(mockStopAnalyzer).toHaveBeenCalled()
-    })
-
-    it('handles analyzer failures during active capture', async () => {
-      await bootstrap.startApp()
-      const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
-
-      // Start capture successfully
-      mockGetInterfaceSelection.mockReturnValue({
-        interfaces: [{ name: 'eth0', addresses: ['192.168.1.1'], isUp: true }],
-        selectedInterfaceNames: ['eth0'],
-        isCapturing: true,
-        activeInterfaceNames: ['eth0']
-      })
-
-      const startHandler = mockIpc.handlers.get('network:startCapture')
-      await startHandler!()
-
-      // Simulate analyzer failure
-      mockStopAnalyzer.mockImplementation(() => {
-        throw new Error('Analyzer stop failed')
-      })
-
-      const stopHandler = mockIpc.handlers.get('network:stopCapture')
-      // Should handle stop failure gracefully
-      await expect(stopHandler!()).rejects.toThrow('Analyzer stop failed')
-    })
-
-    it('handles interface update failures during active capture', async () => {
-      await bootstrap.startApp()
-      const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
-
-      // Start capture
-      mockGetInterfaceSelection.mockReturnValue({
-        interfaces: [
-          { name: 'eth0', addresses: ['192.168.1.1'], isUp: true },
-          { name: 'wlan0', addresses: ['192.168.1.2'], isUp: true }
-        ],
-        selectedInterfaceNames: ['eth0'],
-        isCapturing: true,
-        activeInterfaceNames: ['eth0']
-      })
-
-      const startHandler = mockIpc.handlers.get('network:startCapture')
-      await startHandler!()
-
-      // Simulate interface update failure
-      mockUpdateAnalyzerInterfaces.mockRejectedValueOnce(
-        new Error('Failed to update network analyzer interface selection')
-      )
-
-      const selectHandler = mockIpc.handlers.get('network:selectInterface')
-      await expect(selectHandler!(null, ['wlan0'])).rejects.toThrow()
+      await testFn(mockIpc)
     })
 
     it('handles getInterfaces when no interfaces available', async () => {

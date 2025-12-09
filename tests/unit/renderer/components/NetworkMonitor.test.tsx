@@ -2,6 +2,8 @@ import '@testing-library/jest-dom/vitest'
 import { render, screen, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import React from 'react'
 import NetworkMonitor from '@renderer/components/NetworkMonitor'
 
 type PacketListener = Parameters<Window['api']['onNetworkData']>[0]
@@ -60,13 +62,11 @@ describe('NetworkMonitor Component', () => {
     window.api.getGeoLocation = vi.fn().mockResolvedValue({ country: 'US', city: 'Mountain View' })
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.clearAllMocks()
-    // Clear any running intervals/timeouts
-    vi.useFakeTimers()
-    vi.runOnlyPendingTimers()
-    vi.useRealTimers()
     listeners.length = 0
+    // Give any pending timers a chance to complete
+    await new Promise((resolve) => setTimeout(resolve, 100))
   })
 
   it('starts capture on button click', async () => {
@@ -83,12 +83,9 @@ describe('NetworkMonitor Component', () => {
       if (startButton) await user.click(startButton)
     })
 
-    await waitFor(
-      () => {
-        expect(window.api.startCapture).toHaveBeenCalled()
-      },
-      { timeout: 3000 }
-    )
+    await waitFor(() => {
+      expect(window.api.startCapture).toHaveBeenCalled()
+    }, 3000)
   })
 
   it('stops capture on pause click', async () => {
@@ -109,15 +106,12 @@ describe('NetworkMonitor Component', () => {
       if (pauseButton) await user.click(pauseButton)
     })
 
-    await waitFor(
-      () => {
-        expect(window.api.stopCapture).toHaveBeenCalled()
-      },
-      { timeout: 3000 }
-    )
+    await waitFor(() => {
+      expect(window.api.stopCapture).toHaveBeenCalled()
+    }, 3000)
   })
 
-  it('handles capture errors', async () => {
+  it('handles capture errors gracefully', async () => {
     const user = userEvent.setup()
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     window.api.startCapture = vi.fn().mockRejectedValue(new Error('Capture failed'))
@@ -145,46 +139,18 @@ describe('NetworkMonitor Component', () => {
       expect(consoleErrorSpy).toHaveBeenCalledWith('Capture toggle failed', expect.any(Error))
     })
 
+    const buttonsAfterError = screen.getAllByRole('button')
+    expect(buttonsAfterError.length).toBeGreaterThan(0)
+    const retryButton = buttonsAfterError.find((btn) => btn.textContent?.includes('Start'))
+    expect(retryButton).toBeDefined()
+
     consoleErrorSpy.mockRestore()
   })
 
-  it('updates packet count and state when packets are received', async () => {
-    const onNetworkDataSpy = vi.fn((callback: PacketListener) => {
-      listeners.push(callback)
-      return () => {
-        const index = listeners.indexOf(callback)
-        if (index > -1) listeners.splice(index, 1)
-      }
-    })
-    window.api.onNetworkData = onNetworkDataSpy
-
-    await act(async () => {
-      render(<NetworkMonitor {...defaultProps} maxPackets={5} />)
-    })
-
-    await waitFor(
-      () => {
-        expect(onNetworkDataSpy).toHaveBeenCalled()
-      },
-      { timeout: 3000 }
-    )
-
-    const packet: Packet = {
-      procName: 'Chrome',
-      pid: 4242,
-      size: 1024,
-      timestamp: Date.now()
-    }
-
-    await act(async () => {
-      listeners.forEach((listener) => listener(packet))
-    })
-
-    expect(listeners.length).toBeGreaterThan(0)
-  })
-
   it('enforces maxPackets limit', async () => {
-    render(<NetworkMonitor {...defaultProps} maxPackets={2} />)
+    await act(async () => {
+      render(<NetworkMonitor {...defaultProps} maxPackets={3} />)
+    })
 
     await waitFor(
       () => {
@@ -193,71 +159,33 @@ describe('NetworkMonitor Component', () => {
       { timeout: 3000 }
     )
 
-    const packets: Packet[] = [
-      { procName: 'App1', pid: 1, size: 100, timestamp: Date.now() },
-      { procName: 'App2', pid: 2, size: 200, timestamp: Date.now() + 1 },
-      { procName: 'App3', pid: 3, size: 300, timestamp: Date.now() + 2 }
-    ]
+    // Send 5 packets, but maxPackets is 3
+    const packets: Packet[] = Array.from({ length: 5 }, (_, i) => ({
+      procName: `App${i}`,
+      pid: 1000 + i,
+      size: 100,
+      timestamp: Date.now() + i,
+      srcIP: '192.168.1.1',
+      dstIP: '8.8.8.8',
+      protocol: 'TCP' as const,
+      appName: `App${i}`,
+      appDisplayName: `App${i}`
+    }))
 
     await act(async () => {
       packets.forEach((packet) => {
         listeners.forEach((listener) => listener(packet))
       })
+      await Promise.resolve()
+      // Give React time to update
+      await new Promise((resolve) => setTimeout(resolve, 200))
     })
 
-    await waitFor(
-      () => {
-        expect(listeners.length).toBeGreaterThan(0)
-      },
-      { timeout: 3000 }
-    )
-  })
-
-  it('handles empty interfaces gracefully', async () => {
-    window.api.getNetworkInterfaces = vi.fn().mockResolvedValue({
-      interfaces: [],
-      bestInterfaceName: undefined,
-      isCapturing: false,
-      selectedInterfaceNames: [],
-      activeInterfaceNames: []
-    })
-
-    await act(async () => {
-      render(<NetworkMonitor {...defaultProps} />)
-    })
-
-    await waitFor(
-      () => {
-        expect(window.api.getNetworkInterfaces).toHaveBeenCalled()
-      },
-      { timeout: 3000 }
-    )
-
-    await waitFor(
-      () => {
-        expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
-      },
-      { timeout: 3000 }
-    )
-  })
-
-  it('handles capture toggle when no interfaces available', async () => {
-    window.api.getNetworkInterfaces = vi.fn().mockResolvedValue({
-      interfaces: [],
-      isCapturing: false,
-      selectedInterfaceNames: [],
-      activeInterfaceNames: []
-    })
-
-    await act(async () => {
-      render(<NetworkMonitor {...defaultProps} />)
-    })
-
-    await waitFor(
-      () => {
-        expect(window.api.getNetworkInterfaces).toHaveBeenCalled()
-      },
-      { timeout: 3000 }
-    )
+    await waitFor(() => {
+      const appTexts = screen.queryAllByText(/App/i)
+      expect(appTexts.length).toBeGreaterThan(0)
+      const waitingText = screen.queryByText(/waiting for network activity/i)
+      expect(waitingText).toBeNull()
+    }, 5000)
   })
 })

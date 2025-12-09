@@ -276,7 +276,6 @@ describe('collectNetstatRows', () => {
       )
 
       const rows = await collectNetstatRows()
-      // Should return empty array or minimal valid rows, not crash
       expect(Array.isArray(rows)).toBe(true)
     })
 
@@ -310,15 +309,13 @@ describe('collectNetstatRows', () => {
       )
 
       const rows = await collectNetstatRows()
-      // Should still parse successfully despite stderr
       expect(rows.length).toBeGreaterThan(0)
     })
 
     it('handles unsupported platform gracefully', async () => {
       setPlatform('freebsd' as NodeJS.Platform)
-      mockExecWithFixture('linux') // Fallback to linux command
+      mockExecWithFixture('linux')
 
-      // Should not throw, but use fallback
       const rows = await collectNetstatRows()
       expect(Array.isArray(rows)).toBe(true)
     })
@@ -356,7 +353,6 @@ describe('collectNetstatRows', () => {
       )
 
       const rows = await collectNetstatRows()
-      // Should parse what it can, skip invalid lines
       expect(Array.isArray(rows)).toBe(true)
     })
   })

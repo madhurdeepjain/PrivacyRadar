@@ -1,249 +1,279 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import path from 'path'
 
-// Mock the IPC handler logic
-function validateKey(key: string): boolean {
+const mockHelpers = vi.hoisted(() => {
+  const handlers = new Map<string, (...args: unknown[]) => unknown>()
+  return {
+    ipcMain: {
+      handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      }),
+      handlers: {
+        get: (channel: string) => handlers.get(channel)
+      }
+    },
+    app: {
+      whenReady: vi.fn(() => Promise.resolve()),
+      getPath: vi.fn((name: string) =>
+        name === 'userData' ? '/tmp/test-user-data' : '/tmp/test-path'
+      ),
+      getAppPath: vi.fn(() => '/tmp/test-app-path'),
+      quit: vi.fn(),
+      on: vi.fn(),
+      once: vi.fn()
+    }
+  }
+})
+
+vi.mock('electron', () => ({
+  __esModule: true,
+  default: mockHelpers,
+  ...mockHelpers
+}))
+
+vi.mock('@electron-toolkit/utils', () => ({
+  electronApp: {
+    setAppUserModelId: vi.fn()
+  }
+}))
+
+vi.mock('@infra/logging', () => ({
+  logger: {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn()
+  }
+}))
+
+function validateSettingKey(key: unknown): key is string {
   return typeof key === 'string' && /^[a-zA-Z0-9_-]+$/.test(key) && key.length <= 100
-}
-
-function validateValue(value: string): boolean {
-  return typeof value === 'string' && value.length <= 10000
 }
 
 describe('Settings Handler Security Tests', () => {
   let testDir: string
   let testFilePath: string
+  let setValueHandler: ((...args: unknown[]) => unknown) | undefined
+  let getValueHandler: ((...args: unknown[]) => unknown) | undefined
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `test-settings-${Date.now()}`)
     await fs.mkdir(testDir, { recursive: true })
     testFilePath = join(testDir, 'values.json')
+
+    // Override getPath to return our test directory
+    mockHelpers.app.getPath.mockImplementation((name: string) => {
+      if (name === 'userData') return testDir
+      return '/tmp/test-path'
+    })
+
+    const filePath = testFilePath
+
+    setValueHandler = async (_event: unknown, key: string, value: string) => {
+      if (!validateSettingKey(key)) {
+        throw new Error('Invalid setting key')
+      }
+
+      if (typeof value !== 'string' || value.length > 10000) {
+        throw new Error('Invalid setting value')
+      }
+
+      let values: Record<string, string> = {}
+      const { existsSync } = await import('fs')
+      if (existsSync(filePath)) {
+        const data = await fs.readFile(filePath, 'utf8')
+        try {
+          const parsed = JSON.parse(data)
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            values = parsed
+          }
+        } catch {
+          // continue with empty values
+        }
+      }
+
+      values[key] = value
+
+      const dirPath = path.dirname(filePath)
+      await fs.mkdir(dirPath, { recursive: true })
+
+      const tmpPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).substring(7)}`
+      await fs.writeFile(tmpPath, JSON.stringify(values), 'utf8')
+      await fs.rename(tmpPath, filePath)
+    }
+
+    getValueHandler = async (_event: unknown, key: string) => {
+      if (!validateSettingKey(key)) {
+        return null
+      }
+
+      try {
+        const { existsSync } = await import('fs')
+        if (!existsSync(filePath)) {
+          return null
+        }
+        const data = await fs.readFile(filePath, 'utf8')
+        const values = JSON.parse(data)
+
+        if (typeof values !== 'object' || values === null || Array.isArray(values)) {
+          return null
+        }
+
+        return values[key] ?? null
+      } catch {
+        return null
+      }
+    }
   })
 
   afterEach(async () => {
     try {
       await fs.rm(testDir, { recursive: true, force: true })
     } catch {
-      // Ignore cleanup errors
+      // cleanup errors
     }
+    vi.clearAllMocks()
   })
 
-  describe('Key Validation', () => {
-    it('accepts valid keys', () => {
-      expect(validateKey('viewMode')).toBe(true)
-      expect(validateKey('darkMode')).toBe(true)
-      expect(validateKey('maxPackets')).toBe(true)
-      expect(validateKey('key_123')).toBe(true)
-      expect(validateKey('key-123')).toBe(true)
+  describe('set-value IPC Handler Security', () => {
+    // Merged all key validation tests into parameterized test
+    it.each([
+      ['../settings', 'Invalid setting key'],
+      ['../../etc/passwd', 'Invalid setting key'],
+      ['/absolute/path', 'Invalid setting key'],
+      ['key.value', 'Invalid setting key'],
+      ['key@host', 'Invalid setting key'],
+      ['key#comment', 'Invalid setting key'],
+      ['key space', 'Invalid setting key'],
+      ['a'.repeat(101), 'Invalid setting key'],
+      ['', 'Invalid setting key']
+    ])('rejects malicious key: %s', async (key, expectedError) => {
+      expect(setValueHandler).toBeDefined()
+      await expect(setValueHandler!(null, key, 'value')).rejects.toThrow(expectedError)
     })
 
-    it('rejects keys with path traversal', () => {
-      expect(validateKey('../settings')).toBe(false)
-      expect(validateKey('../../etc/passwd')).toBe(false)
-      expect(validateKey('/absolute/path')).toBe(false)
-    })
-
-    it('rejects keys with special characters', () => {
-      expect(validateKey('key.value')).toBe(false)
-      expect(validateKey('key@host')).toBe(false)
-      expect(validateKey('key#comment')).toBe(false)
-      expect(validateKey('key space')).toBe(false)
-    })
-
-    it('rejects keys that are too long', () => {
-      expect(validateKey('a'.repeat(101))).toBe(false)
-    })
-
-    it('rejects non-string keys', () => {
+    // Merged value validation tests
+    it.each([
+      ['a'.repeat(10001), 'Invalid setting value'],
+      [null, 'Invalid setting value'],
+      [123, 'Invalid setting value']
+    ])('rejects invalid value: %s', async (value, expectedError) => {
+      expect(setValueHandler).toBeDefined()
       // @ts-expect-error Testing invalid input
-      expect(validateKey(null)).toBe(false)
-      // @ts-expect-error Testing invalid input
-      expect(validateKey(123)).toBe(false)
-      // @ts-expect-error Testing invalid input
-      expect(validateKey({})).toBe(false)
-    })
-  })
-
-  describe('Value Validation', () => {
-    it('accepts valid values', () => {
-      expect(validateValue('network')).toBe(true)
-      expect(validateValue('true')).toBe(true)
-      expect(validateValue('500')).toBe(true)
+      await expect(setValueHandler!(null, 'validKey', value)).rejects.toThrow(expectedError)
     })
 
-    it('rejects values that are too long', () => {
-      expect(validateValue('a'.repeat(10001))).toBe(false)
-    })
+    it('accepts valid key-value pairs', async () => {
+      expect(setValueHandler).toBeDefined()
 
-    it('rejects non-string values', () => {
-      // @ts-expect-error Testing invalid input
-      expect(validateValue(null)).toBe(false)
-      // @ts-expect-error Testing invalid input
-      expect(validateValue(123)).toBe(false)
-    })
-  })
-
-  describe('JSON Parsing Safety', () => {
-    it('handles corrupted JSON gracefully', async () => {
-      await fs.writeFile(testFilePath, '{ invalid json }')
-
-      try {
-        const data = await fs.readFile(testFilePath, 'utf8')
-        JSON.parse(data)
-        expect.fail('Should have thrown on invalid JSON')
-      } catch (error) {
-        expect(error).toBeInstanceOf(SyntaxError)
-      }
-    })
-
-    it('handles non-object JSON', async () => {
-      await fs.writeFile(testFilePath, '"just a string"')
+      await setValueHandler!(null, 'viewMode', 'network')
 
       const data = await fs.readFile(testFilePath, 'utf8')
       const parsed = JSON.parse(data)
-      expect(typeof parsed).not.toBe('object')
+      expect(parsed.viewMode).toBe('network')
     })
 
-    it('handles array JSON', async () => {
-      await fs.writeFile(testFilePath, '["array", "values"]')
+    it('uses atomic write pattern (temp file then rename)', async () => {
+      expect(setValueHandler).toBeDefined()
+
+      await setValueHandler!(null, 'testKey', 'testValue')
 
       const data = await fs.readFile(testFilePath, 'utf8')
       const parsed = JSON.parse(data)
-      expect(Array.isArray(parsed)).toBe(true)
-    })
-  })
-
-  describe('Race Condition Prevention', () => {
-    it('uses atomic write pattern', async () => {
-      const tmpPath = `${testFilePath}.tmp`
-      const values = { key1: 'value1' }
-
-      // Write to temp file first
-      await fs.writeFile(tmpPath, JSON.stringify(values), 'utf8')
-      // Then rename (atomic operation)
-      await fs.rename(tmpPath, testFilePath)
-
-      const data = await fs.readFile(testFilePath, 'utf8')
-      expect(JSON.parse(data)).toEqual(values)
+      expect(parsed.testKey).toBe('testValue')
     })
 
-    it('handles concurrent writes correctly', async () => {
-      const writePromises = Array.from({ length: 10 }, (_, i) =>
-        fs.writeFile(testFilePath, JSON.stringify({ key: `value${i}` }), 'utf8')
-      )
+    it('handles corrupted JSON file gracefully', async () => {
+      // Write corrupted JSON
+      await fs.writeFile(testFilePath, '{ invalid json }', 'utf8')
 
-      await Promise.all(writePromises)
+      expect(setValueHandler).toBeDefined()
 
-      // Last write should be present (or one of them)
+      await setValueHandler!(null, 'newKey', 'newValue')
+
       const data = await fs.readFile(testFilePath, 'utf8')
       const parsed = JSON.parse(data)
-      expect(parsed).toHaveProperty('key')
-    })
-  })
-
-  describe('Edge Cases', () => {
-    it('handles null key input', () => {
-      // @ts-expect-error Testing invalid input
-      expect(validateKey(null)).toBe(false)
+      expect(parsed).toHaveProperty('newKey')
+      expect(parsed.newKey).toBe('newValue')
     })
 
-    it('handles undefined key input', () => {
-      // @ts-expect-error Testing invalid input
-      expect(validateKey(undefined)).toBe(false)
-    })
-
-    it('handles empty string key', () => {
-      expect(validateKey('')).toBe(false)
-    })
-
-    it('handles very long key (DoS prevention)', () => {
-      expect(validateKey('a'.repeat(101))).toBe(false)
-      expect(validateKey('a'.repeat(100))).toBe(true)
-    })
-
-    it('handles null value input', () => {
-      // @ts-expect-error Testing invalid input
-      expect(validateValue(null)).toBe(false)
-    })
-
-    it('handles undefined value input', () => {
-      // @ts-expect-error Testing invalid input
-      expect(validateValue(undefined)).toBe(false)
-    })
-
-    it('handles empty string value', () => {
-      expect(validateValue('')).toBe(true) // Empty string is valid
-    })
-
-    it('handles very long value (DoS prevention)', () => {
-      expect(validateValue('a'.repeat(10001))).toBe(false)
-      expect(validateValue('a'.repeat(10000))).toBe(true)
-    })
-
-    it('handles file permission errors gracefully', async () => {
-      // Create a read-only file (simulated)
+    it('handles file permission errors', async () => {
       await fs.writeFile(testFilePath, '{}', 'utf8')
-      await fs.chmod(testFilePath, 0o444) // Read-only
+      await fs.chmod(testFilePath, 0o444)
+
+      expect(setValueHandler).toBeDefined()
 
       try {
-        // Try to write - should fail gracefully
-        await fs.writeFile(testFilePath, JSON.stringify({ key: 'value' }), 'utf8')
+        await setValueHandler!(null, 'key', 'value')
+        const data = await fs.readFile(testFilePath, 'utf8')
+        expect(JSON.parse(data)).not.toHaveProperty('key')
       } catch (error) {
         expect(error).toBeDefined()
       } finally {
-        // Restore permissions for cleanup
         try {
           await fs.chmod(testFilePath, 0o644)
         } catch {
-          // Ignore
+          // cleanup
         }
       }
     })
 
-    it('handles disk full scenario (simulated)', async () => {
-      // This is hard to test without actually filling disk, but we can test error handling
-      const largeData = 'x'.repeat(1000000) // 1MB
+    // Merged encoded payload tests
+    it.each([
+      ['../settings', '../settings'],
+      ['key%2Evalue', 'key.value'], // URL encoded dot
+      ['key%2Fvalue', 'key/value'], // URL encoded slash
+      ['key\u002Evalue', 'key.value'], // Unicode dot
+      ['key\x2Evalue', 'key.value'], // Hex dot
+      ['key\0value', 'key\0value'] // Null byte
+    ])('rejects encoded path traversal: %s', async (encoded, decoded) => {
+      expect(setValueHandler).toBeDefined()
+      const key = encoded.includes('%') ? decodeURIComponent(encoded) : decoded
 
-      try {
-        await fs.writeFile(testFilePath, JSON.stringify({ data: largeData }), 'utf8')
-        // If it succeeds, that's fine - we're just testing it doesn't crash
-        const data = await fs.readFile(testFilePath, 'utf8')
-        expect(data).toBeDefined()
-      } catch (error) {
-        // If it fails due to size, that's also valid
-        expect(error).toBeDefined()
-      }
+      await expect(setValueHandler!(null, key, 'value')).rejects.toThrow('Invalid setting key')
     })
   })
 
-  describe('Encoded Payload Attacks', () => {
-    it('rejects URL-encoded path traversal', () => {
-      const encoded = '../settings'
-      const decoded = decodeURIComponent(encoded)
-      expect(validateKey(decoded)).toBe(false)
+  describe('get-value IPC Handler Security', () => {
+    it('rejects malicious keys', async () => {
+      expect(getValueHandler).toBeDefined()
+
+      const result = await getValueHandler!(null, '../etc/passwd')
+      expect(result).toBeNull()
     })
 
-    it('rejects double-encoded path traversal', () => {
-      const doubleEncoded = encodeURIComponent(encodeURIComponent('../settings'))
-      const decoded = decodeURIComponent(decodeURIComponent(doubleEncoded))
-      expect(validateKey(decoded)).toBe(false)
+    it('returns null for non-existent file', async () => {
+      expect(getValueHandler).toBeDefined()
+
+      const result = await getValueHandler!(null, 'nonexistent')
+      expect(result).toBeNull()
     })
 
-    it('rejects unicode-encoded special characters', () => {
-      const unicodeKey = 'key\u002Evalue' // Unicode dot
-      expect(validateKey(unicodeKey)).toBe(false)
+    it('returns null for corrupted JSON', async () => {
+      await fs.writeFile(testFilePath, '{ invalid json }', 'utf8')
+
+      expect(getValueHandler).toBeDefined()
+      const result = await getValueHandler!(null, 'anyKey')
+      expect(result).toBeNull()
     })
 
-    it('rejects hex-encoded special characters', () => {
-      const hexKey = 'key\x2Evalue' // Hex dot
-      expect(validateKey(hexKey)).toBe(false)
+    it('returns null for non-object JSON', async () => {
+      await fs.writeFile(testFilePath, '"just a string"', 'utf8')
+
+      expect(getValueHandler).toBeDefined()
+      const result = await getValueHandler!(null, 'anyKey')
+      expect(result).toBeNull()
     })
 
-    it('rejects null byte injection', () => {
-      const nullByteKey = 'key\0value'
-      expect(validateKey(nullByteKey)).toBe(false)
+    it('returns value for valid key', async () => {
+      await fs.writeFile(testFilePath, JSON.stringify({ viewMode: 'network' }), 'utf8')
+
+      expect(getValueHandler).toBeDefined()
+      const result = await getValueHandler!(null, 'viewMode')
+      expect(result).toBe('network')
     })
   })
 })

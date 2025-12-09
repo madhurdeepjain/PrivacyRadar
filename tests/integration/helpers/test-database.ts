@@ -4,7 +4,6 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { join } from 'path'
 import * as schema from '../../../src/main/infrastructure/db/schema'
 
-// Store sqlite instances to close them properly
 const dbInstances = new WeakMap<BetterSQLite3Database<typeof schema>, Database>()
 
 export function createTestDatabase(
@@ -16,7 +15,6 @@ export function createTestDatabase(
 
   const db = drizzle(sqlite, { schema })
 
-  // Store the sqlite instance for later cleanup
   dbInstances.set(db, sqlite)
 
   if (migrationsPath) {

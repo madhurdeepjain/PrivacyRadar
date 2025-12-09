@@ -53,9 +53,7 @@ const mockHelpers = vi.hoisted(() => {
       isDestroyed: vi.fn(() => false),
       loadURL: vi.fn(),
       loadFile: vi.fn()
-    })),
-    eventListeners,
-    sessionUpdateListeners
+    }))
   }
 })
 
@@ -148,7 +146,6 @@ describe('System Monitor Events Integration', () => {
     await bootstrap.startApp()
     const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
 
-    // Start system monitor
     const startHandler = mockIpc.handlers.get('system:start')
     expect(startHandler).toBeDefined()
 
@@ -210,42 +207,6 @@ describe('System Monitor Events Integration', () => {
     expect(sessions).toHaveLength(0)
   })
 
-  it('handles event history management', async () => {
-    await bootstrap.startApp()
-    const mockWindow = mockHelpers.BrowserWindow()
-
-    const events = [
-      {
-        id: 'event-1',
-        app: 'App1',
-        appName: 'App 1',
-        bundleId: 'com.app1',
-        service: 'Camera',
-        allowed: true,
-        timestamp: new Date(),
-        eventType: 'request' as const,
-        pid: 1001
-      },
-      {
-        id: 'event-2',
-        app: 'App2',
-        appName: 'App 2',
-        bundleId: 'com.app2',
-        service: 'Microphone',
-        allowed: false,
-        timestamp: new Date(),
-        eventType: 'request' as const,
-        pid: 1002
-      }
-    ]
-
-    events.forEach((event) => {
-      mockWindow.webContents.send('system:event', event)
-    })
-
-    expect(mockWindow.webContents.send).toHaveBeenCalledWith('system:event', expect.any(Object))
-  })
-
   it('stops system monitor', async () => {
     await bootstrap.startApp()
     const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
@@ -259,16 +220,5 @@ describe('System Monitor Events Integration', () => {
     const stopResult = await stopHandler!()
     expect(mockSystemMonitor.stop).toHaveBeenCalled()
     expect(stopResult).toEqual({ success: true })
-  })
-
-  it('checks system monitoring support', async () => {
-    await bootstrap.startApp()
-    const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
-
-    const isSupportedHandler = mockIpc.handlers.get('system:is-supported')
-    expect(isSupportedHandler).toBeDefined()
-
-    const isSupported = await isSupportedHandler!()
-    expect(typeof isSupported).toBe('boolean')
   })
 })

@@ -225,6 +225,14 @@ npm run dev:renderer
 
 ## Testing
 
+### Setup
+
+Before running tests, ensure native modules are rebuilt:
+
+```bash
+npm rebuild better-sqlite3
+```
+
 ### Unit Tests
 
 ```bash
