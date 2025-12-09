@@ -1,4 +1,4 @@
-import { BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
 import { is, optimizer } from '@electron-toolkit/utils'
 
@@ -21,6 +21,7 @@ export function createMainWindow(): BrowserWindow {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
+  app.setAppUserModelId('Privacy Radar')
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
