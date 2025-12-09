@@ -7,10 +7,13 @@ import { Bounce, ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { Database, Download, MoveRight } from 'lucide-react'
 
-
-async function fetchTables(setTables: React.Dispatch<React.SetStateAction<string[]>>): Promise<void> {
+async function fetchTables(
+  setTables: React.Dispatch<React.SetStateAction<string[]>>
+): Promise<void> {
   console.log('Fetching table names from database...')
-  const [tableNames, error_message] = await window.api.queryDatabase('SELECT name FROM sqlite_master WHERE type=\'table\'')
+  const [tableNames, error_message] = await window.api.queryDatabase(
+    "SELECT name FROM sqlite_master WHERE type='table'"
+  )
   console.log('Received table names:', tableNames, 'Error message:', error_message)
   if (!error_message && Array.isArray(tableNames)) {
     setTables((tableNames as { name: string }[]).map((table) => table.name))
