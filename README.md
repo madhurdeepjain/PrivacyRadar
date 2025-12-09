@@ -1,4 +1,9 @@
+<div align="center">
+  <img src="resources/icon.png" alt="Privacy Radar Icon" width="128" height="128">
+
 # Privacy Radar
+
+</div>
 
 **Privacy Radar** is a comprehensive privacy monitoring application built with Electron, React, and TypeScript. It provides real-time network traffic analysis and system permission monitoring to help users understand and control their digital privacy.
 
