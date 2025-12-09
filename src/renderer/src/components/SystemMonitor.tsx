@@ -69,6 +69,13 @@ export function SystemMonitor(): React.JSX.Element {
           return updated.some((e) => e.id === event.id) ? updated : [event, ...updated]
         })
       } else {
+        const NOTIFICATION_TITLE = (event.service || 'System Monitor') + ' Access Alert'
+        const NOTIFICATION_BODY = event.appName + ' has ' + event.service + ' permission.'
+
+        new Notification(NOTIFICATION_TITLE, {
+          body: NOTIFICATION_BODY,
+          icon: '../../resources/icon.ico'
+        })
         setActiveSessions((prev) => {
           const exists = prev.find((s) => s.id === event.id)
           if (exists) {
