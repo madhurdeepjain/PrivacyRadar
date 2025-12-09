@@ -1,5 +1,4 @@
 import '@testing-library/jest-dom/vitest'
-import React from 'react'
 import { render, screen, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,7 +7,15 @@ import NetworkMonitor from '@renderer/components/NetworkMonitor'
 type PacketListener = Parameters<Window['api']['onNetworkData']>[0]
 type Packet = Parameters<PacketListener>[0]
 
-const createMockInterfaceResponse = (overrides = {}) => ({
+const createMockInterfaceResponse = (
+  overrides = {}
+): {
+  interfaces: Array<{ name: string; addresses: string[]; isUp: boolean; description: string }>
+  bestInterfaceName: string
+  selectedInterfaceNames: string[]
+  isCapturing: boolean
+  activeInterfaceNames: string[]
+} => ({
   interfaces: [{ name: 'eth0', addresses: ['192.168.1.1'], isUp: true, description: 'Ethernet' }],
   bestInterfaceName: 'eth0',
   isCapturing: false,

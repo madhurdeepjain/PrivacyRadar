@@ -218,6 +218,7 @@ describe('Application Bootstrap Integration', () => {
       }
 
       const { createSystemMonitor } = await import('@core/system/system-monitor-factory')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(createSystemMonitor).mockReturnValue(mockSystemMonitor as any)
 
       const { logger } = await import('@infra/logging')

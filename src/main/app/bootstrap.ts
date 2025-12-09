@@ -62,7 +62,7 @@ export async function startApp(): Promise<void> {
     ipcMain.handle('network:getPublicIP', async () => {
       return await geoLocationService.getPublicIP()
     })
-    const getInterfaces = () => getInterfaceSelection()
+    const getInterfaces = (): ReturnType<typeof getInterfaceSelection> => getInterfaceSelection()
 
     ipcMain.handle('network:getInterfaces', getInterfaces)
     ipcMain.handle('network:selectInterface', async (_event, interfaceNames: unknown) => {

@@ -24,7 +24,15 @@ export function createMockBrowserWindow(): BrowserWindow {
   } as unknown as BrowserWindow
 }
 
-export function createMockIpcMain() {
+export function createMockIpcMain(): {
+  handle: ReturnType<typeof vi.fn>
+  removeHandler: ReturnType<typeof vi.fn>
+  handlers: {
+    get: (channel: string) => ((...args: unknown[]) => unknown) | undefined
+    has: (channel: string) => boolean
+    clear: () => void
+  }
+} {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
   return {
     handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
@@ -39,7 +47,11 @@ export function createMockIpcMain() {
   }
 }
 
-export function createMockApp() {
+export function createMockApp(): {
+  whenReady: ReturnType<typeof vi.fn>
+  getPath: ReturnType<typeof vi.fn>
+  quit: ReturnType<typeof vi.fn>
+} {
   return {
     whenReady: vi.fn(() => Promise.resolve()),
     getPath: vi.fn((name: string) =>

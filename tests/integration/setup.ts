@@ -27,7 +27,9 @@ export function cleanupTestDatabase(): void {
   if (testDbPath && existsSync(testDbPath)) {
     try {
       unlinkSync(testDbPath)
-    } catch {}
+    } catch {
+      // Ignore errors when cleaning up test database
+    }
     testDbPath = null
   }
 }

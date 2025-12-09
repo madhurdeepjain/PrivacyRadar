@@ -40,13 +40,14 @@ beforeAll(async () => {
 describe('queryDatabase Security Tests', () => {
   const mockDb = {
     client: {
-      prepare: vi.fn((sql: string) => ({
+      prepare: vi.fn(() => ({
         iterate: vi.fn(() => [])
       }))
     }
   }
 
   beforeEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(getDatabase).mockReturnValue(mockDb as any)
   })
 
@@ -234,14 +235,14 @@ describe('queryDatabase Security Tests', () => {
     })
 
     it('handles query with special unicode characters', () => {
-      const [results, error] = queryDatabase('SELECT * FROM global_snapshots WHERE id = "测试"')
+      const [results] = queryDatabase('SELECT * FROM global_snapshots WHERE id = "测试"')
       // Should either succeed or fail validation, not crash
       expect(Array.isArray(results)).toBe(true)
     })
 
     it('handles query with null bytes', () => {
       const queryWithNull = 'SELECT * FROM global_snapshots\0 WHERE id = 1'
-      const [results, error] = queryDatabase(queryWithNull)
+      const [results] = queryDatabase(queryWithNull)
       // Should handle gracefully
       expect(Array.isArray(results)).toBe(true)
     })

@@ -254,7 +254,7 @@ describe('Database Operations Integration', () => {
       })
 
       // Concurrent read and write
-      const [writeResult, readResult] = await Promise.all([
+      const [, readResult] = await Promise.all([
         repo.writeRegistries(globalReg, new Map(), new Map()),
         db.select().from(schema.globalSnapshots)
       ])
@@ -267,6 +267,7 @@ describe('Database Operations Integration', () => {
       const repo = new RegistryRepository(db)
 
       // Try to write with missing required fields (TypeScript won't allow this, but runtime might)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const invalidReg = new Map<string, any>()
       invalidReg.set('invalid', {
         interfaceName: 'invalid'

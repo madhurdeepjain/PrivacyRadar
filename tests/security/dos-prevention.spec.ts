@@ -33,13 +33,14 @@ vi.mock('@config/constants', () => ({
 describe('DoS Prevention Tests', () => {
   const mockDb = {
     client: {
-      prepare: vi.fn((sql: string) => ({
+      prepare: vi.fn(() => ({
         iterate: vi.fn(() => [])
       }))
     }
   }
 
   beforeEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(getDatabase).mockReturnValue(mockDb as any)
   })
 
@@ -55,7 +56,7 @@ describe('DoS Prevention Tests', () => {
 
       const results = await Promise.all(queries)
       expect(results).toHaveLength(1000)
-      results.forEach(([data, error]) => {
+      results.forEach(([data]) => {
         expect(Array.isArray(data)).toBe(true)
       })
     })
@@ -80,7 +81,7 @@ describe('DoS Prevention Tests', () => {
       const manyParams = Array.from({ length: 1000 }, (_, i) => i).join(',')
       const query = `SELECT * FROM global_snapshots WHERE id IN (${manyParams})`
 
-      const [results, error] = queryDatabase(query)
+      const [results] = queryDatabase(query)
       expect(Array.isArray(results)).toBe(true)
     })
 
@@ -88,7 +89,7 @@ describe('DoS Prevention Tests', () => {
       const longString = 'x'.repeat(10000)
       const query = `SELECT * FROM global_snapshots WHERE name = '${longString}'`
 
-      const [results, error] = queryDatabase(query)
+      const [results] = queryDatabase(query)
       expect(Array.isArray(results)).toBe(true)
     })
   })

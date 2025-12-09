@@ -16,7 +16,6 @@ import { Device, NetworkInterface, PacketMetadata } from '@shared/interfaces/com
 import { formatIPv6Address } from '@main/shared/utils/address-normalizer'
 import { getDatabase } from '@infra/db'
 import { RegistryRepository } from '@main/core/network/db-writer'
-import { getDatabasePaths } from '../infrastructure/db/utils'
 import Database from 'better-sqlite3'
 
 let analyzer: NetworkAnalyzer | null = null
@@ -325,7 +324,7 @@ export function queryDatabase(sql: string): [unknown[], string] {
   const db = getDatabase()
   try {
     // Access underlying better-sqlite3 client for raw SQL
-    const sqliteClient = (db as unknown as { client: Database }).client
+    const sqliteClient = (db as unknown as { client: InstanceType<typeof Database> }).client
     const stmt = sqliteClient.prepare(trimmed)
     return [Array.from(stmt.iterate()), '']
   } catch (error) {

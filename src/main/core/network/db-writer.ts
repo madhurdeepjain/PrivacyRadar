@@ -54,6 +54,8 @@ export class RegistryRepository {
   ): Promise<void> {
     logger.debug(`Prepared ${snapshots.length} ${typeName} snapshots`)
     if (snapshots.length > 0) {
+      // Type assertion needed because generic T may not exactly match table insert type
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await this.db.insert(table).values(snapshots as any)
     }
   }

@@ -36,10 +36,12 @@ describe('RegManager', () => {
     processTracker = {
       getProcess: vi.fn(),
       findRootParent: vi.fn((pid: number) => pid)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any
 
     connectionTracker = {
       getConnections: vi.fn(() => [])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any
 
     mockGeoService = {

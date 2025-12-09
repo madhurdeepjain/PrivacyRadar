@@ -325,6 +325,7 @@ describe('Capture Workflow Integration', () => {
       expect(selectHandler).toBeDefined()
 
       // Non-array input should throw
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await expect(selectHandler!(null, 'not-an-array' as any)).rejects.toThrow()
     })
 

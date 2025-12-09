@@ -1,4 +1,4 @@
-import { exec, execSync, execFile, execFileSync } from 'child_process'
+import { exec, execFile, execFileSync } from 'child_process'
 import { promisify } from 'util'
 import { existsSync, readdirSync, readlinkSync } from 'fs'
 import { BrowserWindow } from 'electron'

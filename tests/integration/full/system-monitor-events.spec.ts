@@ -205,12 +205,6 @@ describe('System Monitor Events Integration', () => {
     expect(sessions).toHaveLength(1)
     expect(sessions[0]).toHaveProperty('sessionStart')
 
-    const sessionEnd = {
-      ...sessionStart,
-      sessionEnd: new Date(),
-      duration: 5000
-    }
-
     mockSystemMonitor.getActiveSessions.mockReturnValue([])
     sessions = await getSessionsHandler!()
     expect(sessions).toHaveLength(0)
