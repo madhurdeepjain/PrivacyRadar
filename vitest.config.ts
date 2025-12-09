@@ -27,10 +27,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json'],
-      include: [
-        'src/main/**/*.{ts,tsx}',
-        'src/renderer/src/**/*.{ts,tsx}'
-      ],
+      include: ['src/main/**/*.{ts,tsx}', 'src/renderer/src/**/*.{ts,tsx}'],
       exclude: [
         'src/**/*.d.ts',
         'src/**/*.test.{ts,tsx}',
@@ -68,10 +65,7 @@ export default defineConfig({
             'out/**'
           ],
           environment: 'node',
-          setupFiles: [
-            'tests/setup.ts',
-            'tests/integration/setup.ts'
-          ]
+          setupFiles: ['tests/setup.ts', 'tests/integration/setup.ts']
         }
       },
       {
@@ -80,14 +74,10 @@ export default defineConfig({
           alias: sharedAliases
         },
         test: {
-          include: [
-            'tests/unit/renderer/**/*.test.{ts,tsx}'
-          ],
+          include: ['tests/unit/renderer/**/*.test.{ts,tsx}'],
           exclude: ['tests/e2e/**', 'node_modules/**', 'dist/**', 'out/**'],
           environment: 'jsdom',
-          setupFiles: [
-            'tests/setup.ts'
-          ]
+          setupFiles: ['tests/setup.ts']
         }
       }
     ]

@@ -21,7 +21,7 @@ export function getTestDatabase(): BetterSQLite3Database<typeof schema> {
 
 export function cleanupTestDatabase(): void {
   if (testDb) {
-    (testDb as unknown as { client: Database }).client.close()
+    ;(testDb as unknown as { client: Database }).client.close()
     testDb = null
   }
   if (testDbPath && existsSync(testDbPath)) {
@@ -38,4 +38,3 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 afterAll(() => cleanupTestDatabase())
-

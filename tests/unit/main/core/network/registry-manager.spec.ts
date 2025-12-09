@@ -15,8 +15,8 @@ vi.mock('@infra/logging', () => ({
 
 vi.mock('@config/constants', () => ({
   FRIENDLY_APP_NAMES: {
-    'chrome': 'Chrome',
-    'firefox': 'Firefox'
+    chrome: 'Chrome',
+    firefox: 'Firefox'
   }
 }))
 
@@ -32,7 +32,7 @@ describe('RegManager', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useRealTimers()
-    
+
     processTracker = {
       getProcess: vi.fn(),
       findRootParent: vi.fn((pid: number) => pid)
@@ -211,7 +211,7 @@ describe('RegManager', () => {
       regManager.processPacket(packet)
 
       // Wait for async geo lookup
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 100))
 
       expect(mockGeoService.lookup).toHaveBeenCalledWith('8.8.8.8')
     })
@@ -232,7 +232,7 @@ describe('RegManager', () => {
       regManager.processPacket(packet)
 
       // Wait for async geo lookup
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 100))
 
       // Should not crash
       const processRegs = regManager.getProcessRegistries()
@@ -386,4 +386,3 @@ describe('RegManager', () => {
     })
   })
 })
-

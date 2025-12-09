@@ -19,4 +19,3 @@ export function createMockPacket(overrides?: Partial<PacketMetadata>): PacketMet
     ...overrides
   }
 }
-

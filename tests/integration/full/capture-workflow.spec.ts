@@ -18,7 +18,9 @@ const mockHelpers = vi.hoisted(() => {
     },
     app: {
       whenReady: vi.fn(() => Promise.resolve()),
-      getPath: vi.fn((name: string) => name === 'userData' ? '/tmp/test-user-data' : '/tmp/test-path'),
+      getPath: vi.fn((name: string) =>
+        name === 'userData' ? '/tmp/test-user-data' : '/tmp/test-path'
+      ),
       getAppPath: vi.fn(() => '/tmp/test-app-path'),
       quit: vi.fn(),
       on: vi.fn(),
@@ -277,7 +279,6 @@ describe('Capture Workflow Integration', () => {
     expect(state.activeInterfaceNames).toEqual([])
   })
 
-
   describe('Error Handling', () => {
     it('handles analyzer start failures', async () => {
       await bootstrap.startApp()
@@ -285,7 +286,7 @@ describe('Capture Workflow Integration', () => {
 
       mockStartAnalyzer.mockRejectedValueOnce(new Error('Failed to start analyzer'))
       const startHandler = mockIpc.handlers.get('network:startCapture')
-      
+
       await expect(startHandler!()).rejects.toThrow('Failed to start analyzer')
       expect(mockStartAnalyzer).toHaveBeenCalled()
     })
@@ -297,10 +298,10 @@ describe('Capture Workflow Integration', () => {
       mockUpdateAnalyzerInterfaces.mockRejectedValueOnce(
         new Error('Invalid interface names: must be an array of valid interface name strings')
       )
-      
+
       const selectHandler = mockIpc.handlers.get('network:selectInterface')
       expect(selectHandler).toBeDefined()
-      
+
       await expect(selectHandler!(null, ['invalid-interface'])).rejects.toThrow()
     })
 
@@ -310,7 +311,7 @@ describe('Capture Workflow Integration', () => {
 
       const selectHandler = mockIpc.handlers.get('network:selectInterface')
       expect(selectHandler).toBeDefined()
-      
+
       // Empty array should be handled (will select all available)
       const result = await selectHandler!(null, [])
       expect(result).toBeDefined()
@@ -322,7 +323,7 @@ describe('Capture Workflow Integration', () => {
 
       const selectHandler = mockIpc.handlers.get('network:selectInterface')
       expect(selectHandler).toBeDefined()
-      
+
       // Non-array input should throw
       await expect(selectHandler!(null, 'not-an-array' as any)).rejects.toThrow()
     })
@@ -340,7 +341,7 @@ describe('Capture Workflow Integration', () => {
 
       const stopHandler = mockIpc.handlers.get('network:stopCapture')
       expect(stopHandler).toBeDefined()
-      
+
       // Should not throw when stopping while not capturing
       const result = await stopHandler!()
       expect(result.isCapturing).toBe(false)
@@ -412,10 +413,9 @@ describe('Capture Workflow Integration', () => {
 
       const getInterfacesHandler = mockIpc.handlers.get('network:getInterfaces')
       const result = await getInterfacesHandler!()
-      
+
       expect(result.interfaces).toEqual([])
       expect(result.isCapturing).toBe(false)
     })
   })
 })
-

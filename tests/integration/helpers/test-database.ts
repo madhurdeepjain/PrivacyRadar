@@ -7,12 +7,15 @@ import * as schema from '../../../src/main/infrastructure/db/schema'
 // Store sqlite instances to close them properly
 const dbInstances = new WeakMap<BetterSQLite3Database<typeof schema>, Database>()
 
-export function createTestDatabase(dbPath: string, migrationsPath?: string): BetterSQLite3Database<typeof schema> {
+export function createTestDatabase(
+  dbPath: string,
+  migrationsPath?: string
+): BetterSQLite3Database<typeof schema> {
   const sqlite = new Database(dbPath)
   sqlite.pragma('journal_mode = WAL')
 
   const db = drizzle(sqlite, { schema })
-  
+
   // Store the sqlite instance for later cleanup
   dbInstances.set(db, sqlite)
 
@@ -34,4 +37,3 @@ export function closeDatabase(db: BetterSQLite3Database<typeof schema>): void {
 export function getMigrationsPath(): string {
   return join(process.cwd(), 'drizzle')
 }
-

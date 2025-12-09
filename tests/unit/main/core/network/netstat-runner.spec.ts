@@ -285,7 +285,11 @@ describe('collectNetstatRows', () => {
       execFileMock.mockImplementation(
         (cmd: string, args: string[], options: unknown, callback: ExecFileCallback) => {
           const cb = (typeof options === 'function' ? options : callback) as ExecFileCallback
-          cb(null, 'Active Internet connections (w/o servers)\nProto Recv-Q Send-Q Local Address           Foreign Address         State\n', '')
+          cb(
+            null,
+            'Active Internet connections (w/o servers)\nProto Recv-Q Send-Q Local Address           Foreign Address         State\n',
+            ''
+          )
           return undefined
         }
       )
@@ -309,7 +313,6 @@ describe('collectNetstatRows', () => {
       // Should still parse successfully despite stderr
       expect(rows.length).toBeGreaterThan(0)
     })
-
 
     it('handles unsupported platform gracefully', async () => {
       setPlatform('freebsd' as NodeJS.Platform)
@@ -341,9 +344,13 @@ describe('collectNetstatRows', () => {
       execFileMock.mockImplementation(
         (cmd: string, args: string[], options: unknown, callback: ExecFileCallback) => {
           const cb = (typeof options === 'function' ? options : callback) as ExecFileCallback
-          cb(null, 'tcp        0      0 0.0.0.0:8080    0.0.0.0:*               LISTEN      \n' +
-                   'incomplete line with missing data\n' +
-                   'udp        0      0 0.0.0.0:53     0.0.0.0:*                           1234\n', '')
+          cb(
+            null,
+            'tcp        0      0 0.0.0.0:8080    0.0.0.0:*               LISTEN      \n' +
+              'incomplete line with missing data\n' +
+              'udp        0      0 0.0.0.0:53     0.0.0.0:*                           1234\n',
+            ''
+          )
           return undefined
         }
       )

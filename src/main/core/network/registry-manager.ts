@@ -324,7 +324,7 @@ export class RegManager {
     ;(async () => {
       try {
         const cachedGeoData = await this.geoService.lookup(ip)
-        
+
         if (!cachedGeoData.country && !cachedGeoData.city && !cachedGeoData.as) {
           return
         }

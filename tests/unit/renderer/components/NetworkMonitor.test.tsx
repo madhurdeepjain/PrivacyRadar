@@ -9,9 +9,7 @@ type PacketListener = Parameters<Window['api']['onNetworkData']>[0]
 type Packet = Parameters<PacketListener>[0]
 
 const createMockInterfaceResponse = (overrides = {}) => ({
-  interfaces: [
-    { name: 'eth0', addresses: ['192.168.1.1'], isUp: true, description: 'Ethernet' }
-  ],
+  interfaces: [{ name: 'eth0', addresses: ['192.168.1.1'], isUp: true, description: 'Ethernet' }],
   bestInterfaceName: 'eth0',
   isCapturing: false,
   selectedInterfaceNames: ['eth0'],
@@ -44,8 +42,12 @@ describe('NetworkMonitor Component', () => {
     })
     window.api.getNetworkInterfaces = vi.fn().mockResolvedValue(createMockInterfaceResponse())
     window.api.selectNetworkInterface = vi.fn().mockResolvedValue(createMockInterfaceResponse())
-    window.api.startCapture = vi.fn().mockResolvedValue(createMockInterfaceResponse({ isCapturing: true }))
-    window.api.stopCapture = vi.fn().mockResolvedValue(createMockInterfaceResponse({ isCapturing: false }))
+    window.api.startCapture = vi
+      .fn()
+      .mockResolvedValue(createMockInterfaceResponse({ isCapturing: true }))
+    window.api.stopCapture = vi
+      .fn()
+      .mockResolvedValue(createMockInterfaceResponse({ isCapturing: false }))
     window.api.onProcessRegistryData = vi.fn()
     window.api.getPublicIP = vi.fn().mockResolvedValue('8.8.8.8')
     window.api.getGeoLocation = vi.fn().mockResolvedValue({ country: 'US', city: 'Mountain View' })
@@ -74,14 +76,19 @@ describe('NetworkMonitor Component', () => {
       if (startButton) await user.click(startButton)
     })
 
-    await waitFor(() => {
-      expect(window.api.startCapture).toHaveBeenCalled()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(window.api.startCapture).toHaveBeenCalled()
+      },
+      { timeout: 3000 }
+    )
   })
 
   it('stops capture on pause click', async () => {
     const user = userEvent.setup()
-    window.api.getNetworkInterfaces = vi.fn().mockResolvedValue(createMockInterfaceResponse({ isCapturing: true }))
+    window.api.getNetworkInterfaces = vi
+      .fn()
+      .mockResolvedValue(createMockInterfaceResponse({ isCapturing: true }))
 
     await act(async () => {
       render(<NetworkMonitor {...defaultProps} />)
@@ -95,9 +102,12 @@ describe('NetworkMonitor Component', () => {
       if (pauseButton) await user.click(pauseButton)
     })
 
-    await waitFor(() => {
-      expect(window.api.stopCapture).toHaveBeenCalled()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(window.api.stopCapture).toHaveBeenCalled()
+      },
+      { timeout: 3000 }
+    )
   })
 
   it('handles capture errors', async () => {
@@ -109,13 +119,16 @@ describe('NetworkMonitor Component', () => {
       render(<NetworkMonitor {...defaultProps} />)
     })
 
-    await waitFor(() => {
-      expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
+      },
+      { timeout: 3000 }
+    )
 
     const buttons = screen.getAllByRole('button')
     const startButton = buttons.find((btn) => btn.textContent?.includes('Start'))
-    
+
     await act(async () => {
       if (startButton) await user.click(startButton)
       await Promise.resolve()
@@ -142,9 +155,12 @@ describe('NetworkMonitor Component', () => {
       render(<NetworkMonitor {...defaultProps} maxPackets={5} />)
     })
 
-    await waitFor(() => {
-      expect(onNetworkDataSpy).toHaveBeenCalled()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(onNetworkDataSpy).toHaveBeenCalled()
+      },
+      { timeout: 3000 }
+    )
 
     const packet: Packet = {
       procName: 'Chrome',
@@ -162,10 +178,13 @@ describe('NetworkMonitor Component', () => {
 
   it('enforces maxPackets limit', async () => {
     render(<NetworkMonitor {...defaultProps} maxPackets={2} />)
-    
-    await waitFor(() => {
-      expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
-    }, { timeout: 3000 })
+
+    await waitFor(
+      () => {
+        expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
+      },
+      { timeout: 3000 }
+    )
 
     const packets: Packet[] = [
       { procName: 'App1', pid: 1, size: 100, timestamp: Date.now() },
@@ -179,9 +198,12 @@ describe('NetworkMonitor Component', () => {
       })
     })
 
-    await waitFor(() => {
-      expect(listeners.length).toBeGreaterThan(0)
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(listeners.length).toBeGreaterThan(0)
+      },
+      { timeout: 3000 }
+    )
   })
 
   it('handles empty interfaces gracefully', async () => {
@@ -197,13 +219,19 @@ describe('NetworkMonitor Component', () => {
       render(<NetworkMonitor {...defaultProps} />)
     })
 
-    await waitFor(() => {
-      expect(window.api.getNetworkInterfaces).toHaveBeenCalled()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(window.api.getNetworkInterfaces).toHaveBeenCalled()
+      },
+      { timeout: 3000 }
+    )
 
-    await waitFor(() => {
-      expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
+      },
+      { timeout: 3000 }
+    )
   })
 
   it('handles capture toggle when no interfaces available', async () => {
@@ -218,8 +246,11 @@ describe('NetworkMonitor Component', () => {
       render(<NetworkMonitor {...defaultProps} />)
     })
 
-    await waitFor(() => {
-      expect(window.api.getNetworkInterfaces).toHaveBeenCalled()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(window.api.getNetworkInterfaces).toHaveBeenCalled()
+      },
+      { timeout: 3000 }
+    )
   })
 })

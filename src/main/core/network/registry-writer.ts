@@ -66,13 +66,14 @@ export class RegistryWriter {
     }
   }
 
-  private appendSnapshot(filePath: string, snapshot: unknown, isFirstRef: { value: boolean }): void {
+  private appendSnapshot(
+    filePath: string,
+    snapshot: unknown,
+    isFirstRef: { value: boolean }
+  ): void {
     const prefix = isFirstRef.value ? '  ' : ',\n  '
     isFirstRef.value = false
-    appendFileSync(
-      filePath,
-      prefix + JSON.stringify(snapshot, null, 2).split('\n').join('\n  ')
-    )
+    appendFileSync(filePath, prefix + JSON.stringify(snapshot, null, 2).split('\n').join('\n  '))
   }
 
   private writeGlobalRegistry(registry: Map<string, GlobalRegistry>): void {
@@ -106,9 +107,7 @@ export class RegistryWriter {
       {
         timestamp: Date.now(),
         count: registries.size,
-        processes: Array.from(registries.values()).map((reg) =>
-          this.serializeProcessRegistry(reg)
-        )
+        processes: Array.from(registries.values()).map((reg) => this.serializeProcessRegistry(reg))
       },
       { value: this.isFirstProcess }
     )

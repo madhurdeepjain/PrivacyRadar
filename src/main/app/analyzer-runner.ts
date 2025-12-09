@@ -102,7 +102,12 @@ function ensureSelectionInSync(deviceInfo: Device): void {
 }
 
 function validateInterfaceName(name: unknown): name is string {
-  return typeof name === 'string' && name.length > 0 && name.length <= 100 && /^[a-zA-Z0-9_-]+$/.test(name)
+  return (
+    typeof name === 'string' &&
+    name.length > 0 &&
+    name.length <= 100 &&
+    /^[a-zA-Z0-9_-]+$/.test(name)
+  )
 }
 
 function validateInterfaceNamesArray(interfaceNames: unknown): interfaceNames is string[] {
@@ -280,7 +285,8 @@ export function stopAnalyzer(): void {
 }
 
 const ALLOWED_TABLES = ['global_snapshots', 'application_snapshots', 'process_snapshots']
-const DANGEROUS_KEYWORDS = /UNION|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|TRUNCATE|REPLACE/i
+const DANGEROUS_KEYWORDS =
+  /UNION|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|TRUNCATE|REPLACE/i
 
 export function queryDatabase(sql: string): [unknown[], string] {
   if (typeof sql !== 'string' || sql.length === 0) {
@@ -288,33 +294,33 @@ export function queryDatabase(sql: string): [unknown[], string] {
   }
 
   const trimmed = sql.trim()
-  
+
   // Only allow SELECT statements
   if (!trimmed.toUpperCase().startsWith('SELECT')) {
     return [[], 'Only SELECT queries are allowed']
   }
-  
+
   // Block dangerous keywords (check before FROM parsing)
   if (DANGEROUS_KEYWORDS.test(trimmed)) {
     return [[], 'Dangerous SQL keywords not allowed']
   }
-  
+
   // Additional safety: prevent comments, multiple statements (check early)
   if (trimmed.includes('--') || trimmed.includes('/*') || trimmed.includes(';')) {
     return [[], 'SQL comments and multiple statements not allowed']
   }
-  
+
   // Validate table name - extract FROM clause
   const fromMatch = trimmed.match(/FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)/i)
   if (!fromMatch) {
     return [[], 'Invalid SQL syntax: FROM clause required']
   }
-  
+
   const tableName = fromMatch[1]
   if (!ALLOWED_TABLES.includes(tableName)) {
     return [[], `Table '${tableName}' is not accessible`]
   }
-  
+
   // Use existing database connection for performance
   const db = getDatabase()
   try {

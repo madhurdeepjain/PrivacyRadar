@@ -88,7 +88,7 @@ describe('Settings Handler Security Tests', () => {
   describe('JSON Parsing Safety', () => {
     it('handles corrupted JSON gracefully', async () => {
       await fs.writeFile(testFilePath, '{ invalid json }')
-      
+
       try {
         const data = await fs.readFile(testFilePath, 'utf8')
         JSON.parse(data)
@@ -100,7 +100,7 @@ describe('Settings Handler Security Tests', () => {
 
     it('handles non-object JSON', async () => {
       await fs.writeFile(testFilePath, '"just a string"')
-      
+
       const data = await fs.readFile(testFilePath, 'utf8')
       const parsed = JSON.parse(data)
       expect(typeof parsed).not.toBe('object')
@@ -108,7 +108,7 @@ describe('Settings Handler Security Tests', () => {
 
     it('handles array JSON', async () => {
       await fs.writeFile(testFilePath, '["array", "values"]')
-      
+
       const data = await fs.readFile(testFilePath, 'utf8')
       const parsed = JSON.parse(data)
       expect(Array.isArray(parsed)).toBe(true)
@@ -119,12 +119,12 @@ describe('Settings Handler Security Tests', () => {
     it('uses atomic write pattern', async () => {
       const tmpPath = `${testFilePath}.tmp`
       const values = { key1: 'value1' }
-      
+
       // Write to temp file first
       await fs.writeFile(tmpPath, JSON.stringify(values), 'utf8')
       // Then rename (atomic operation)
       await fs.rename(tmpPath, testFilePath)
-      
+
       const data = await fs.readFile(testFilePath, 'utf8')
       expect(JSON.parse(data)).toEqual(values)
     })
@@ -133,9 +133,9 @@ describe('Settings Handler Security Tests', () => {
       const writePromises = Array.from({ length: 10 }, (_, i) =>
         fs.writeFile(testFilePath, JSON.stringify({ key: `value${i}` }), 'utf8')
       )
-      
+
       await Promise.all(writePromises)
-      
+
       // Last write should be present (or one of them)
       const data = await fs.readFile(testFilePath, 'utf8')
       const parsed = JSON.parse(data)
@@ -186,7 +186,7 @@ describe('Settings Handler Security Tests', () => {
       // Create a read-only file (simulated)
       await fs.writeFile(testFilePath, '{}', 'utf8')
       await fs.chmod(testFilePath, 0o444) // Read-only
-      
+
       try {
         // Try to write - should fail gracefully
         await fs.writeFile(testFilePath, JSON.stringify({ key: 'value' }), 'utf8')
@@ -205,7 +205,7 @@ describe('Settings Handler Security Tests', () => {
     it('handles disk full scenario (simulated)', async () => {
       // This is hard to test without actually filling disk, but we can test error handling
       const largeData = 'x'.repeat(1000000) // 1MB
-      
+
       try {
         await fs.writeFile(testFilePath, JSON.stringify({ data: largeData }), 'utf8')
         // If it succeeds, that's fine - we're just testing it doesn't crash
@@ -247,4 +247,3 @@ describe('Settings Handler Security Tests', () => {
     })
   })
 })
-

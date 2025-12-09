@@ -63,7 +63,7 @@ export async function startApp(): Promise<void> {
       return await geoLocationService.getPublicIP()
     })
     const getInterfaces = () => getInterfaceSelection()
-    
+
     ipcMain.handle('network:getInterfaces', getInterfaces)
     ipcMain.handle('network:selectInterface', async (_event, interfaceNames: unknown) => {
       if (!Array.isArray(interfaceNames) || interfaceNames.length > 100) {
@@ -96,7 +96,7 @@ export async function startApp(): Promise<void> {
         logger.error('Invalid setting key', { key })
         throw new Error('Invalid setting key')
       }
-      
+
       if (typeof value !== 'string' || value.length > 10000) {
         logger.error('Invalid setting value', { key, valueLength: value?.length })
         throw new Error('Invalid setting value')
@@ -117,13 +117,13 @@ export async function startApp(): Promise<void> {
             logger.warn('Failed to parse settings file, resetting', { filePath, error: parseError })
           }
         }
-        
+
         values[key] = value
-        
+
         // Ensure directory exists before writing (idempotent - safe for concurrent calls)
         const dirPath = path.dirname(filePath)
         await fs.promises.mkdir(dirPath, { recursive: true })
-        
+
         // Atomic write: use unique temp filename to avoid conflicts in concurrent writes
         // Use timestamp + random to ensure uniqueness
         const tmpPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).substring(7)}`
@@ -148,13 +148,13 @@ export async function startApp(): Promise<void> {
         }
         const data = await fs.promises.readFile(filePath, 'utf8')
         const values = JSON.parse(data)
-        
+
         // Validate parsed structure
         if (typeof values !== 'object' || values === null || Array.isArray(values)) {
           logger.warn('Corrupted settings file', { filePath })
           return null
         }
-        
+
         return values[key] ?? null
       } catch (err) {
         logger.error('Error loading settings', { key, error: err })

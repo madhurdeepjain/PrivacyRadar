@@ -19,7 +19,9 @@ const mockHelpers = vi.hoisted(() => {
     },
     app: {
       whenReady: vi.fn(() => Promise.resolve()),
-      getPath: vi.fn((name: string) => name === 'userData' ? '/tmp/test-user-data' : '/tmp/test-path'),
+      getPath: vi.fn((name: string) =>
+        name === 'userData' ? '/tmp/test-user-data' : '/tmp/test-path'
+      ),
       getAppPath: vi.fn(() => '/tmp/test-app-path'),
       quit: vi.fn(),
       on: vi.fn(),
@@ -276,5 +278,3 @@ describe('System Monitor Events Integration', () => {
     expect(typeof isSupported).toBe('boolean')
   })
 })
-
-

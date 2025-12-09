@@ -62,11 +62,15 @@ describe('Command Injection Prevention', () => {
     it('should use execFileSync with array args, not template strings', () => {
       const command = 'which'
       const args = ['lsof']
-      
+
       execFileSync(command, args, { stdio: 'ignore' })
-      
+
       expect(execFileSync).toHaveBeenCalledWith(command, args, { stdio: 'ignore' })
-      expect(execFileSync).not.toHaveBeenCalledWith(expect.stringContaining('which lsof'), expect.anything(), expect.anything())
+      expect(execFileSync).not.toHaveBeenCalledWith(
+        expect.stringContaining('which lsof'),
+        expect.anything(),
+        expect.anything()
+      )
     })
   })
 
@@ -119,6 +123,4 @@ describe('Command Injection Prevention', () => {
       expect(validateCommand('command%2Farg')).toBe(false)
     })
   })
->>>>>>> e402cf9 (refactor: remove duplicates, reorganize tests, optimize code)
 })
-

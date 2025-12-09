@@ -18,7 +18,9 @@ const mockHelpers = vi.hoisted(() => {
     },
     app: {
       whenReady: vi.fn(() => Promise.resolve()),
-      getPath: vi.fn((name: string) => name === 'userData' ? '/tmp/test-user-data' : '/tmp/test-path'),
+      getPath: vi.fn((name: string) =>
+        name === 'userData' ? '/tmp/test-user-data' : '/tmp/test-path'
+      ),
       getAppPath: vi.fn(() => '/tmp/test-app-path'),
       quit: vi.fn(),
       on: vi.fn(),
@@ -27,7 +29,13 @@ const mockHelpers = vi.hoisted(() => {
     },
     BrowserWindow: vi.fn(() => ({
       id: 1,
-      webContents: { send: vi.fn(), on: vi.fn(), once: vi.fn(), removeListener: vi.fn(), removeAllListeners: vi.fn() },
+      webContents: {
+        send: vi.fn(),
+        on: vi.fn(),
+        once: vi.fn(),
+        removeListener: vi.fn(),
+        removeAllListeners: vi.fn()
+      },
       on: vi.fn(),
       once: vi.fn(),
       close: vi.fn(),
@@ -117,12 +125,12 @@ describe('Application Bootstrap Integration', () => {
 
   it('completes bootstrap sequence', async () => {
     await bootstrap.startApp()
-    
+
     const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
     const { getDatabase } = await import('@infra/db')
     const { createMainWindow } = await import('@main/app/window-manager')
     const { createSystemMonitor } = await import('@core/system/system-monitor-factory')
-    
+
     expect(mockIpc.handlers.has('network:getInterfaces')).toBe(true)
     expect(getDatabase).toHaveBeenCalled()
     expect(createMainWindow).toHaveBeenCalled()
@@ -156,7 +164,6 @@ describe('Application Bootstrap Integration', () => {
     expect(isSupported).toBe(true) // Test actual value, not just type
   })
 
-
   describe('Error Handling', () => {
     it('handles database migration failures gracefully', async () => {
       const { runMigrations } = await import('@infra/db/migrate')
@@ -165,10 +172,10 @@ describe('Application Bootstrap Integration', () => {
       })
 
       const { logger } = await import('@infra/logging')
-      
+
       // Bootstrap should continue even if migrations fail
       await bootstrap.startApp()
-      
+
       expect(logger.error).toHaveBeenCalledWith('Failed to run migrations', expect.any(Error))
       // App should still start
       const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
@@ -182,10 +189,10 @@ describe('Application Bootstrap Integration', () => {
       })
 
       const { logger } = await import('@infra/logging')
-      
+
       // Bootstrap should continue even if database init fails
       await bootstrap.startApp()
-      
+
       expect(logger.error).toHaveBeenCalledWith('Failed to initialize database', expect.any(Error))
       // App should still start
       const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
@@ -214,10 +221,10 @@ describe('Application Bootstrap Integration', () => {
       vi.mocked(createSystemMonitor).mockReturnValue(mockSystemMonitor as any)
 
       const { logger } = await import('@infra/logging')
-      
+
       // Bootstrap should continue even if system monitor fails to start
       await bootstrap.startApp()
-      
+
       expect(logger.warn).toHaveBeenCalledWith('Failed to start system monitor', expect.any(Error))
       // App should still start
       const mockIpc = (await import('electron')).ipcMain as typeof mockHelpers.ipcMain
@@ -241,18 +248,14 @@ describe('Application Bootstrap Integration', () => {
 
       // Should continue registering other handlers
       await bootstrap.startApp()
-      
+
       // Other handlers should still be registered
       expect(mockIpc.handlers.has('network:startCapture')).toBe(true)
     })
 
     it('handles multiple concurrent bootstrap attempts', async () => {
       // Multiple bootstrap calls should not cause issues
-      const promises = [
-        bootstrap.startApp(),
-        bootstrap.startApp(),
-        bootstrap.startApp()
-      ]
+      const promises = [bootstrap.startApp(), bootstrap.startApp(), bootstrap.startApp()]
 
       await Promise.all(promises)
 
@@ -261,4 +264,3 @@ describe('Application Bootstrap Integration', () => {
     })
   })
 })
-

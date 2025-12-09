@@ -79,7 +79,7 @@ describe('DoS Prevention Tests', () => {
     it('handles queries with many parameters', () => {
       const manyParams = Array.from({ length: 1000 }, (_, i) => i).join(',')
       const query = `SELECT * FROM global_snapshots WHERE id IN (${manyParams})`
-      
+
       const [results, error] = queryDatabase(query)
       expect(Array.isArray(results)).toBe(true)
     })
@@ -87,10 +87,9 @@ describe('DoS Prevention Tests', () => {
     it('handles queries with very long string literals', () => {
       const longString = 'x'.repeat(10000)
       const query = `SELECT * FROM global_snapshots WHERE name = '${longString}'`
-      
+
       const [results, error] = queryDatabase(query)
       expect(Array.isArray(results)).toBe(true)
     })
   })
 })
-

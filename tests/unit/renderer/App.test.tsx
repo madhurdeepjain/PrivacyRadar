@@ -67,122 +67,173 @@ describe('App Component', () => {
       await Promise.resolve()
     })
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1, name: /network monitor/i })).toBeInTheDocument()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(
+          screen.getByRole('heading', { level: 1, name: /network monitor/i })
+        ).toBeInTheDocument()
+      },
+      { timeout: 3000 }
+    )
   })
 
-  it('switches to system monitor', async () => {
-    const user = userEvent.setup()
-    await act(async () => {
-      render(<App />)
-      await Promise.resolve()
-    })
-
-    const allButtons = screen.getAllByRole('button')
-    const systemMonitorButton = allButtons.find((btn) => 
-      btn.textContent?.includes('System Monitor') && !btn.textContent.includes('heading')
-    )
-    expect(systemMonitorButton).toBeDefined()
-    await act(async () => {
-      await user.click(systemMonitorButton)
-      await Promise.resolve()
-    })
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1, name: /system monitor/i })).toBeInTheDocument()
-    }, { timeout: 10000 })
-  }, { timeout: 15000 })
-
-  it('switches back to network monitor', async () => {
-    const user = userEvent.setup()
-    await act(async () => {
-      render(<App />)
-      await Promise.resolve()
-    })
-
-    let allButtons = screen.getAllByRole('button')
-    const systemMonitorButton = allButtons.find((btn) => 
-      btn.textContent?.includes('System Monitor') && !btn.textContent.includes('heading')
-    )
-    expect(systemMonitorButton).toBeDefined()
-    await act(async () => {
-      if (systemMonitorButton) await user.click(systemMonitorButton)
-      await Promise.resolve()
-    })
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1, name: /system monitor/i })).toBeInTheDocument()
-    }, { timeout: 3000 })
-
-    allButtons = screen.getAllByRole('button')
-    const networkMonitorButton = allButtons.find((btn) => 
-      btn.textContent?.includes('Network Monitor') && !btn.textContent.includes('heading')
-    )
-    expect(networkMonitorButton).toBeDefined()
-    await act(async () => {
-      if (networkMonitorButton) await user.click(networkMonitorButton)
-      await Promise.resolve()
-    })
-
-    await waitFor(() => {
-      const headings = screen.getAllByRole('heading', { level: 1, name: /network monitor/i })
-      expect(headings.length).toBeGreaterThan(0)
-    }, { timeout: 10000 })
-  }, { timeout: 15000 })
-
-  describe('Error Scenarios', () => {
-    it('handles network API failures gracefully', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      window.api.getNetworkInterfaces = vi.fn().mockRejectedValue(new Error('API failed'))
-
-      await act(async () => {
-        render(<App />)
-        await Promise.resolve()
-      })
-
-      await waitFor(() => {
-        expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to load interfaces', expect.any(Error))
-      }, { timeout: 5000 })
-
-      await waitFor(() => {
-        expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
-      }, { timeout: 3000 })
-
-      consoleErrorSpy.mockRestore()
-    }, { timeout: 10000 })
-
-    it('handles system monitor API failures gracefully', async () => {
+  it(
+    'switches to system monitor',
+    async () => {
       const user = userEvent.setup()
-      window.systemAPI.start = vi.fn().mockRejectedValue(new Error('System monitor failed'))
-
       await act(async () => {
         render(<App />)
         await Promise.resolve()
       })
 
       const allButtons = screen.getAllByRole('button')
-      const systemMonitorButton = allButtons.find((btn) => 
-        btn.textContent?.includes('System Monitor') && !btn.textContent.includes('heading')
+      const systemMonitorButton = allButtons.find(
+        (btn) => btn.textContent?.includes('System Monitor') && !btn.textContent.includes('heading')
       )
       expect(systemMonitorButton).toBeDefined()
-      
       await act(async () => {
         await user.click(systemMonitorButton)
         await Promise.resolve()
       })
 
-      await waitFor(() => {
-        expect(screen.getAllByText(/system monitor/i).length).toBeGreaterThan(0)
-      }, { timeout: 5000 })
+      await waitFor(
+        () => {
+          expect(
+            screen.getByRole('heading', { level: 1, name: /system monitor/i })
+          ).toBeInTheDocument()
+        },
+        { timeout: 10000 }
+      )
+    },
+    { timeout: 15000 }
+  )
 
-      await waitFor(() => {
-        const startButtons = screen.getAllByRole('button').filter((btn) => 
-          btn.textContent?.includes('Start')
+  it(
+    'switches back to network monitor',
+    async () => {
+      const user = userEvent.setup()
+      await act(async () => {
+        render(<App />)
+        await Promise.resolve()
+      })
+
+      let allButtons = screen.getAllByRole('button')
+      const systemMonitorButton = allButtons.find(
+        (btn) => btn.textContent?.includes('System Monitor') && !btn.textContent.includes('heading')
+      )
+      expect(systemMonitorButton).toBeDefined()
+      await act(async () => {
+        if (systemMonitorButton) await user.click(systemMonitorButton)
+        await Promise.resolve()
+      })
+
+      await waitFor(
+        () => {
+          expect(
+            screen.getByRole('heading', { level: 1, name: /system monitor/i })
+          ).toBeInTheDocument()
+        },
+        { timeout: 3000 }
+      )
+
+      allButtons = screen.getAllByRole('button')
+      const networkMonitorButton = allButtons.find(
+        (btn) =>
+          btn.textContent?.includes('Network Monitor') && !btn.textContent.includes('heading')
+      )
+      expect(networkMonitorButton).toBeDefined()
+      await act(async () => {
+        if (networkMonitorButton) await user.click(networkMonitorButton)
+        await Promise.resolve()
+      })
+
+      await waitFor(
+        () => {
+          const headings = screen.getAllByRole('heading', { level: 1, name: /network monitor/i })
+          expect(headings.length).toBeGreaterThan(0)
+        },
+        { timeout: 10000 }
+      )
+    },
+    { timeout: 15000 }
+  )
+
+  describe('Error Scenarios', () => {
+    it(
+      'handles network API failures gracefully',
+      async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+        window.api.getNetworkInterfaces = vi.fn().mockRejectedValue(new Error('API failed'))
+
+        await act(async () => {
+          render(<App />)
+          await Promise.resolve()
+        })
+
+        await waitFor(
+          () => {
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+              'Failed to load interfaces',
+              expect.any(Error)
+            )
+          },
+          { timeout: 5000 }
         )
-        expect(startButtons.length).toBeGreaterThan(0)
-      }, { timeout: 3000 })
-    }, { timeout: 15000 })
+
+        await waitFor(
+          () => {
+            expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
+          },
+          { timeout: 3000 }
+        )
+
+        consoleErrorSpy.mockRestore()
+      },
+      { timeout: 10000 }
+    )
+
+    it(
+      'handles system monitor API failures gracefully',
+      async () => {
+        const user = userEvent.setup()
+        window.systemAPI.start = vi.fn().mockRejectedValue(new Error('System monitor failed'))
+
+        await act(async () => {
+          render(<App />)
+          await Promise.resolve()
+        })
+
+        const allButtons = screen.getAllByRole('button')
+        const systemMonitorButton = allButtons.find(
+          (btn) =>
+            btn.textContent?.includes('System Monitor') && !btn.textContent.includes('heading')
+        )
+        expect(systemMonitorButton).toBeDefined()
+
+        await act(async () => {
+          await user.click(systemMonitorButton)
+          await Promise.resolve()
+        })
+
+        await waitFor(
+          () => {
+            expect(screen.getAllByText(/system monitor/i).length).toBeGreaterThan(0)
+          },
+          { timeout: 5000 }
+        )
+
+        await waitFor(
+          () => {
+            const startButtons = screen
+              .getAllByRole('button')
+              .filter((btn) => btn.textContent?.includes('Start'))
+            expect(startButtons.length).toBeGreaterThan(0)
+          },
+          { timeout: 3000 }
+        )
+      },
+      { timeout: 15000 }
+    )
 
     it('persists settings across view changes', async () => {
       const user = userEvent.setup()
@@ -191,9 +242,12 @@ describe('App Component', () => {
         await Promise.resolve()
       })
 
-      await waitFor(() => {
-        expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
-      }, { timeout: 5000 })
+      await waitFor(
+        () => {
+          expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
+        },
+        { timeout: 5000 }
+      )
 
       await act(async () => {
         await window.api.setValue('viewMode', 'system')
@@ -201,24 +255,27 @@ describe('App Component', () => {
       })
 
       const allButtons = screen.getAllByRole('button')
-      const systemMonitorButton = allButtons.find((btn) => 
-        btn.textContent?.includes('System Monitor') && !btn.textContent.includes('heading')
+      const systemMonitorButton = allButtons.find(
+        (btn) => btn.textContent?.includes('System Monitor') && !btn.textContent.includes('heading')
       )
-      
+
       await act(async () => {
         if (systemMonitorButton) await user.click(systemMonitorButton)
         await Promise.resolve()
       })
 
-      await waitFor(() => {
-        expect(window.api.setValue).toHaveBeenCalledWith('viewMode', expect.any(String))
-      }, { timeout: 3000 })
+      await waitFor(
+        () => {
+          expect(window.api.setValue).toHaveBeenCalledWith('viewMode', expect.any(String))
+        },
+        { timeout: 3000 }
+      )
     })
 
     it('handles API timeout gracefully', async () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      window.api.getNetworkInterfaces = vi.fn(() => 
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 100))
+      window.api.getNetworkInterfaces = vi.fn(
+        () => new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 100))
       )
 
       await act(async () => {
@@ -226,104 +283,132 @@ describe('App Component', () => {
         await Promise.resolve()
       })
 
-      await waitFor(() => {
-        expect(consoleErrorSpy).toHaveBeenCalled()
-      }, { timeout: 2000 })
+      await waitFor(
+        () => {
+          expect(consoleErrorSpy).toHaveBeenCalled()
+        },
+        { timeout: 2000 }
+      )
 
       consoleErrorSpy.mockRestore()
     })
   })
 
   describe('State Verification', () => {
-    it('tracks view mode changes', async () => {
-      const user = userEvent.setup()
-      await act(async () => {
-        render(<App />)
-        await Promise.resolve()
-      })
+    it(
+      'tracks view mode changes',
+      async () => {
+        const user = userEvent.setup()
+        await act(async () => {
+          render(<App />)
+          await Promise.resolve()
+        })
 
-      await waitFor(() => {
-        expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
-      }, { timeout: 5000 })
+        await waitFor(
+          () => {
+            expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
+          },
+          { timeout: 5000 }
+        )
 
-      const allButtons = screen.getAllByRole('button')
-      const systemMonitorButton = allButtons.find((btn) => 
-        btn.textContent?.includes('System Monitor') && !btn.textContent.includes('heading')
-      )
-      expect(systemMonitorButton).toBeDefined()
-      await act(async () => {
-        if (systemMonitorButton) await user.click(systemMonitorButton)
-        await Promise.resolve()
-      })
+        const allButtons = screen.getAllByRole('button')
+        const systemMonitorButton = allButtons.find(
+          (btn) =>
+            btn.textContent?.includes('System Monitor') && !btn.textContent.includes('heading')
+        )
+        expect(systemMonitorButton).toBeDefined()
+        await act(async () => {
+          if (systemMonitorButton) await user.click(systemMonitorButton)
+          await Promise.resolve()
+        })
 
-      await waitFor(() => {
-        expect(screen.getAllByText(/system monitor/i).length).toBeGreaterThan(0)
-      })
+        await waitFor(() => {
+          expect(screen.getAllByText(/system monitor/i).length).toBeGreaterThan(0)
+        })
 
-      await waitFor(() => {
-        expect(screen.getByRole('heading', { level: 1, name: /system monitor/i })).toBeInTheDocument()
-      })
+        await waitFor(() => {
+          expect(
+            screen.getByRole('heading', { level: 1, name: /system monitor/i })
+          ).toBeInTheDocument()
+        })
 
-      const networkMonitorButton = allButtons.find((btn) => 
-        btn.textContent?.includes('Network Monitor') && !btn.textContent.includes('heading')
-      )
-      expect(networkMonitorButton).toBeDefined()
-      await act(async () => {
-        await user.click(networkMonitorButton)
-        await Promise.resolve()
-      })
+        const networkMonitorButton = allButtons.find(
+          (btn) =>
+            btn.textContent?.includes('Network Monitor') && !btn.textContent.includes('heading')
+        )
+        expect(networkMonitorButton).toBeDefined()
+        await act(async () => {
+          await user.click(networkMonitorButton)
+          await Promise.resolve()
+        })
 
-      await waitFor(() => {
-        expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
-      }, { timeout: 5000 })
-    }, { timeout: 15000 })
+        await waitFor(
+          () => {
+            expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
+          },
+          { timeout: 5000 }
+        )
+      },
+      { timeout: 15000 }
+    )
 
-    it('maintains state when switching views', async () => {
-      const user = userEvent.setup()
-      await act(async () => {
-        render(<App />)
-        await Promise.resolve()
-      })
+    it(
+      'maintains state when switching views',
+      async () => {
+        const user = userEvent.setup()
+        await act(async () => {
+          render(<App />)
+          await Promise.resolve()
+        })
 
-      await waitFor(() => {
-        expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
-      }, { timeout: 5000 })
+        await waitFor(
+          () => {
+            expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
+          },
+          { timeout: 5000 }
+        )
 
-      const buttons = screen.getAllByRole('button')
-      const startButton = buttons.find((btn) => btn.textContent?.includes('Start'))
-      await act(async () => {
-        if (startButton) await user.click(startButton)
-        await Promise.resolve()
-      })
+        const buttons = screen.getAllByRole('button')
+        const startButton = buttons.find((btn) => btn.textContent?.includes('Start'))
+        await act(async () => {
+          if (startButton) await user.click(startButton)
+          await Promise.resolve()
+        })
 
-      let allButtons = screen.getAllByRole('button')
-      const systemMonitorButton = allButtons.find((btn) => 
-        btn.textContent?.includes('System Monitor') && !btn.textContent.includes('heading')
-      )
-      expect(systemMonitorButton).toBeDefined()
-      await act(async () => {
-        if (systemMonitorButton) await user.click(systemMonitorButton)
-        await Promise.resolve()
-      })
+        let allButtons = screen.getAllByRole('button')
+        const systemMonitorButton = allButtons.find(
+          (btn) =>
+            btn.textContent?.includes('System Monitor') && !btn.textContent.includes('heading')
+        )
+        expect(systemMonitorButton).toBeDefined()
+        await act(async () => {
+          if (systemMonitorButton) await user.click(systemMonitorButton)
+          await Promise.resolve()
+        })
 
-      await waitFor(() => {
-        expect(screen.getAllByText(/system monitor/i).length).toBeGreaterThan(0)
-      })
+        await waitFor(() => {
+          expect(screen.getAllByText(/system monitor/i).length).toBeGreaterThan(0)
+        })
 
-      allButtons = screen.getAllByRole('button')
-      const networkMonitorButton = allButtons.find((btn) => 
-        btn.textContent?.includes('Network Monitor') && !btn.textContent.includes('heading')
-      )
-      expect(networkMonitorButton).toBeDefined()
-      await act(async () => {
-        if (networkMonitorButton) await user.click(networkMonitorButton)
-        await Promise.resolve()
-      })
+        allButtons = screen.getAllByRole('button')
+        const networkMonitorButton = allButtons.find(
+          (btn) =>
+            btn.textContent?.includes('Network Monitor') && !btn.textContent.includes('heading')
+        )
+        expect(networkMonitorButton).toBeDefined()
+        await act(async () => {
+          if (networkMonitorButton) await user.click(networkMonitorButton)
+          await Promise.resolve()
+        })
 
-      await waitFor(() => {
-        expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
-      }, { timeout: 5000 })
-    }, { timeout: 15000 })
+        await waitFor(
+          () => {
+            expect(screen.getAllByText(/network monitor/i).length).toBeGreaterThan(0)
+          },
+          { timeout: 5000 }
+        )
+      },
+      { timeout: 15000 }
+    )
   })
-
 })

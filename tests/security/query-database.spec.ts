@@ -81,7 +81,9 @@ describe('queryDatabase Security Tests', () => {
     })
 
     it('blocks UNION attacks', () => {
-      const [results, error] = queryDatabase('SELECT * FROM global_snapshots UNION SELECT * FROM settings')
+      const [results, error] = queryDatabase(
+        'SELECT * FROM global_snapshots UNION SELECT * FROM settings'
+      )
       expect(results).toEqual([])
       expect(error).toContain('Dangerous SQL keywords')
     })
@@ -100,7 +102,9 @@ describe('queryDatabase Security Tests', () => {
     })
 
     it('blocks multi-statement attacks', () => {
-      const [results, error] = queryDatabase('SELECT * FROM global_snapshots; SELECT * FROM settings')
+      const [results, error] = queryDatabase(
+        'SELECT * FROM global_snapshots; SELECT * FROM settings'
+      )
       expect(results).toEqual([])
       expect(error).toContain('multiple statements')
     })
@@ -172,7 +176,9 @@ describe('queryDatabase Security Tests', () => {
       mockDb.client.prepare.mockImplementation(() => {
         throw new Error('SQL syntax error')
       })
-      const [results, error] = queryDatabase('SELECT * FROM global_snapshots WHERE invalid_column = 1')
+      const [results, error] = queryDatabase(
+        'SELECT * FROM global_snapshots WHERE invalid_column = 1'
+      )
       expect(results).toEqual([])
       expect(error).toContain('SQL syntax error')
     })
@@ -183,7 +189,9 @@ describe('queryDatabase Security Tests', () => {
       mockDb.client.prepare.mockReturnValue({
         iterate: () => [{ id: 1 }]
       })
-      const [results, error] = queryDatabase('SELECT * FROM global_snapshots WHERE totalPackets > 100')
+      const [results, error] = queryDatabase(
+        'SELECT * FROM global_snapshots WHERE totalPackets > 100'
+      )
       expect(error).toBe('')
       expect(results).toHaveLength(1)
     })
@@ -215,7 +223,6 @@ describe('queryDatabase Security Tests', () => {
         expect(Array.isArray(data)).toBe(true)
       })
     })
-
   })
 
   describe('Edge Cases', () => {
@@ -243,7 +250,7 @@ describe('queryDatabase Security Tests', () => {
       mockDb.client.prepare.mockReturnValue({
         iterate: () => [{ id: 1, name: null, value: undefined }]
       })
-      
+
       const [results, error] = queryDatabase('SELECT * FROM global_snapshots')
       expect(error).toBe('')
       expect(Array.isArray(results)).toBe(true)
@@ -275,6 +282,4 @@ describe('queryDatabase Security Tests', () => {
       expect(error).toContain('SQL comments')
     })
   })
->>>>>>> e402cf9 (refactor: remove duplicates, reorganize tests, optimize code)
 })
-

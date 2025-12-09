@@ -5,7 +5,11 @@ import { tmpdir } from 'os'
 import { RegistryRepository } from '../../../src/main/core/network/db-writer'
 import { createTestDatabase, closeDatabase, getMigrationsPath } from '../helpers/test-database'
 import * as schema from '../../../src/main/infrastructure/db/schema'
-import type { GlobalRegistry, ApplicationRegistry, ProcessRegistry } from '../../../src/main/shared/interfaces/common'
+import type {
+  GlobalRegistry,
+  ApplicationRegistry,
+  ProcessRegistry
+} from '../../../src/main/shared/interfaces/common'
 
 vi.mock('@infra/logging', () => ({
   logger: {
@@ -222,7 +226,7 @@ describe('Database Operations Integration', () => {
 
       const results = await db.select().from(schema.globalSnapshots)
       expect(results.length).toBeGreaterThanOrEqual(2)
-      
+
       await repo1.close()
       await repo2.close()
     })
@@ -261,7 +265,7 @@ describe('Database Operations Integration', () => {
 
     it('handles invalid data gracefully', async () => {
       const repo = new RegistryRepository(db)
-      
+
       // Try to write with missing required fields (TypeScript won't allow this, but runtime might)
       const invalidReg = new Map<string, any>()
       invalidReg.set('invalid', {
@@ -275,7 +279,7 @@ describe('Database Operations Integration', () => {
       } catch (error) {
         expect(error).toBeDefined()
       }
-      
+
       await repo.close()
     })
 
@@ -308,7 +312,7 @@ describe('Database Operations Integration', () => {
       await repo.writeRegistries(globalReg, new Map(), new Map())
       const results = await db.select().from(schema.globalSnapshots)
       expect(results.length).toBe(1000)
-      
+
       await repo.close()
     })
 
@@ -316,10 +320,10 @@ describe('Database Operations Integration', () => {
       // Create a database that we'll make read-only
       const readOnlyPath = join(tmpdir(), `readonly-db-${Date.now()}.db`)
       const readOnlyDb = createTestDatabase(readOnlyPath, getMigrationsPath())
-      
+
       // Close and try to write to read-only file (simulated)
       closeDatabase(readOnlyDb)
-      
+
       // Try to create a new repository with closed database
       const repo = new RegistryRepository(readOnlyDb)
       const globalReg = new Map<string, GlobalRegistry>()
@@ -343,7 +347,7 @@ describe('Database Operations Integration', () => {
       })
 
       await expect(repo.writeRegistries(globalReg, new Map(), new Map())).rejects.toThrow()
-      
+
       if (existsSync(readOnlyPath)) {
         try {
           unlinkSync(readOnlyPath)
@@ -355,7 +359,7 @@ describe('Database Operations Integration', () => {
 
     it('handles schema migration failures', () => {
       const invalidMigrationsPath = join(tmpdir(), 'nonexistent-migrations')
-      
+
       // Should handle missing migrations gracefully or throw
       expect(() => {
         const testDbPath = join(tmpdir(), `test-db-${Date.now()}.db`)
@@ -364,4 +368,3 @@ describe('Database Operations Integration', () => {
     })
   })
 })
-
