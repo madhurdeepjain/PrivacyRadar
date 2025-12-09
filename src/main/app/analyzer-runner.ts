@@ -16,8 +16,7 @@ import { Device, NetworkInterface, PacketMetadata } from '@shared/interfaces/com
 import { formatIPv6Address } from '@main/shared/utils/address-normalizer'
 import { getDatabase } from '@infra/db'
 import { RegistryRepository } from '@main/core/network/db-writer'
-import { getDatabasePaths } from '../infrastructure/db/utils'
-import Database from 'better-sqlite3'
+import * as schema from '@infra/db/schema'
 
 let analyzer: NetworkAnalyzer | null = null
 let sharedProcessTracker: ProcessTracker | null = null
@@ -101,12 +100,35 @@ function ensureSelectionInSync(deviceInfo: Device): void {
   }
 }
 
+function validateInterfaceName(name: unknown): name is string {
+  return (
+    typeof name === 'string' &&
+    name.length > 0 &&
+    name.length <= 100 &&
+    /^[a-zA-Z0-9_-]+$/.test(name)
+  )
+}
+
+function validateInterfaceNamesArray(interfaceNames: unknown): interfaceNames is string[] {
+  if (!Array.isArray(interfaceNames)) {
+    return false
+  }
+  if (interfaceNames.length > 100) {
+    return false
+  }
+  return interfaceNames.every((name) => validateInterfaceName(name))
+}
+
 function applySelectedInterfaces(deviceInfo: Device, interfaceNames?: string[]): void {
   const availableNames = new Set(deviceInfo.interfaces.map((iface) => iface.name))
 
   if (!interfaceNames || interfaceNames.length === 0) {
     selectedInterfaceNames = deviceInfo.interfaces.map((iface) => iface.name)
     return
+  }
+
+  if (!validateInterfaceNamesArray(interfaceNames)) {
+    throw new Error('Invalid interface names: must be an array of valid interface name strings')
   }
 
   const normalized: string[] = []
@@ -171,8 +193,14 @@ export async function startAnalyzer(interfaceNames?: string | string[]): Promise
     iface.addresses = iface.addresses.map((addr) => formatIPv6Address(addr))
   })
   if (Array.isArray(interfaceNames)) {
+    if (!validateInterfaceNamesArray(interfaceNames)) {
+      throw new Error('Invalid interface names: must be an array of valid interface name strings')
+    }
     applySelectedInterfaces(deviceInfo, interfaceNames)
   } else if (interfaceNames) {
+    if (!validateInterfaceName(interfaceNames)) {
+      throw new Error('Invalid interface name: must be a valid interface name string')
+    }
     applySelectedInterfaces(deviceInfo, [interfaceNames])
   } else {
     ensureSelectionInSync(deviceInfo)
@@ -253,31 +281,81 @@ export function stopAnalyzer(): void {
   logger.info('Network analyzer stopped')
 }
 
-export function queryDatabase(sql: string): [unknown[], string] {
-  const db = new Database(getDatabasePaths().dbPath)
+type QueryTable = 'global_snapshots' | 'application_snapshots' | 'process_snapshots'
+
+interface QueryOptions {
+  table: QueryTable
+  limit?: number
+  offset?: number
+}
+
+export function queryDatabase(options: QueryOptions): [unknown[], string] {
+  if (!options || typeof options !== 'object') {
+    return [[], 'Invalid query options: must be an object']
+  }
+
+  const { table, limit = 1000, offset = 0 } = options
+
+  if (!['global_snapshots', 'application_snapshots', 'process_snapshots'].includes(table)) {
+    return [[], `Invalid table: ${table} is not accessible`]
+  }
+
+  if (limit < 1 || limit > 10000) {
+    return [[], 'Limit must be between 1 and 10000']
+  }
+
+  if (offset < 0) {
+    return [[], 'Offset must be non-negative']
+  }
+
+  const db = getDatabase()
   try {
-    return [Array.from(db.prepare(sql).iterate()), '']
-  } catch (error) {
-    let message = ''
-    if (error instanceof Error) {
-      message = error.message
+    let query
+
+    if (table === 'global_snapshots') {
+      query = db.select().from(schema.globalSnapshots)
+    } else if (table === 'application_snapshots') {
+      query = db.select().from(schema.applicationSnapshots)
     } else {
-      try {
-        message = String(error)
-      } catch {
-        message = 'Unknown error'
-      }
+      query = db.select().from(schema.processSnapshots)
     }
+
+    query = query.limit(limit).offset(offset)
+
+    const results = query.all()
+    return [results, '']
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Query failed'
+    logger.error('Database query failed', { table, error: message })
     return [[], message]
-  } finally {
-    db.close()
   }
 }
 
 export async function updateAnalyzerInterfaces(interfaceNames: string[] = []): Promise<void> {
-  interfaceSwitchLock = interfaceSwitchLock
-    .catch(() => undefined)
-    .then(async () => {
+  if (!validateInterfaceNamesArray(interfaceNames)) {
+    throw new Error('Invalid interface names: must be an array of valid interface name strings')
+  }
+
+  const LOCK_TIMEOUT_MS = 30000
+
+  interfaceSwitchLock = (async () => {
+    let timeoutId: NodeJS.Timeout | null = null
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Interface update timeout')), LOCK_TIMEOUT_MS)
+      })
+      await Promise.race([interfaceSwitchLock, timeoutPromise])
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Interface update timeout') {
+        logger.warn('Previous interface update timed out, proceeding with new update')
+      } else {
+        logger.debug('Previous interface update failed, continuing with new update', { error })
+      }
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+
+    try {
       const deviceInfo = refreshDeviceInfo()
       const wasRunning = analyzer !== null
       const previousSelection = [...selectedInterfaceNames]
@@ -322,11 +400,16 @@ export async function updateAnalyzerInterfaces(interfaceNames: string[] = []): P
             interfaces: previousSelection,
             error: restoreError
           })
+          throw restoreError
         }
 
         throw error
       }
-    })
+    } catch (error) {
+      logger.error('Interface update failed', { interfaces: interfaceNames, error })
+      throw error
+    }
+  })()
 
   return interfaceSwitchLock
 }

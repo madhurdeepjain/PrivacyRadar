@@ -1,4 +1,4 @@
-import { exec, execSync, execFile } from 'child_process'
+import { exec, execFile, execFileSync } from 'child_process'
 import { promisify } from 'util'
 import { existsSync, readdirSync, readlinkSync } from 'fs'
 import { BrowserWindow } from 'electron'
@@ -430,11 +430,7 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
   }): void {
     // Filter out system processes - they're legitimate but not user-facing apps
     if (this.isSystemProcess(usage.appName) || this.isSystemProcess(usage.displayName)) {
-      try {
-        logger.debug(`Skipping system process: ${usage.displayName} (${usage.service})`)
-      } catch {
-        // Logger worker may have exited, ignore
-      }
+      logger.debug(`Skipping system process: ${usage.displayName} (${usage.service})`)
       return
     }
 
@@ -468,11 +464,7 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
       this.activeSessions.set(sessionKey, session)
       this.sendEvent(event)
       this.sendSessionUpdate(event)
-      try {
-        logger.debug(`Hardware usage detected: ${usage.displayName} using ${usage.service}`)
-      } catch {
-        // Logger worker may have exited, ignore
-      }
+      logger.debug(`Hardware usage detected: ${usage.displayName} using ${usage.service}`)
     } else {
       const session = this.activeSessions.get(sessionKey)!
       session.lastSeen = new Date()
@@ -1014,12 +1006,13 @@ export class LinuxSystemMonitor extends BaseSystemMonitor {
   }
 
   private hasCommand(command: string): boolean {
+    // Validate command name to prevent command injection
     if (!/^[a-zA-Z0-9_-]+$/.test(command)) {
       return false
     }
 
     try {
-      execSync(`which ${command}`, { stdio: 'ignore' })
+      execFileSync('which', [command], { stdio: 'ignore' })
       return true
     } catch {
       return false

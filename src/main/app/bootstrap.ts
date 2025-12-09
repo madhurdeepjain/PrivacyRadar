@@ -2,7 +2,7 @@ import { app, ipcMain } from 'electron'
 import { electronApp } from '@electron-toolkit/utils'
 import { logger } from '@infra/logging'
 import { runMigrations } from '@infra/db/migrate'
-import { getDatabase } from '@infra/db'
+import { getDatabase, closeDatabase } from '@infra/db'
 import { createMainWindow } from './window-manager'
 import { GeoLocationService } from '../core/network/geo-location'
 import fs from 'fs'
@@ -28,6 +28,10 @@ let ipcHandlersRegistered = false
 let systemMonitor: ISystemMonitor | null = null
 let sharedProcessTracker: ProcessTracker | null = null
 
+function validateSettingKey(key: unknown): key is string {
+  return typeof key === 'string' && /^[a-zA-Z0-9_-]+$/.test(key) && key.length <= 100
+}
+
 export async function startApp(): Promise<void> {
   registerProcessSignalHandlers()
 
@@ -36,70 +40,121 @@ export async function startApp(): Promise<void> {
   electronApp.setAppUserModelId('com.privacyradar')
   registerAppLifecycleHandlers(createMainWindow)
 
-  // Register IPC handlers BEFORE creating the window to avoid race conditions
-  // The renderer may call these handlers immediately on mount
   if (!ipcHandlersRegistered) {
     const userDataPath = app.getPath('userData')
     const filePath = path.join(userDataPath, 'values.json')
     const geoLocationService = new GeoLocationService()
-    ipcMain.handle('network:getGeoLocation', async (_event, ip: string) => {
+    ipcMain.handle('network:getGeoLocation', async (_event, ip: unknown) => {
+      if (typeof ip !== 'string' || ip.length === 0 || ip.length > 45) {
+        logger.error('Invalid IP address parameter', { ip })
+        throw new Error('Invalid IP address: must be a non-empty string with at most 45 characters')
+      }
+      if (!/^[0-9a-fA-F:.]+$/.test(ip)) {
+        logger.error('Invalid IP address format', { ip })
+        throw new Error('Invalid IP address format')
+      }
       return await geoLocationService.lookup(ip)
     })
     ipcMain.handle('network:getPublicIP', async () => {
       return await geoLocationService.getPublicIP()
     })
-    ipcMain.handle('network:getInterfaces', async () => getInterfaceSelection())
-    ipcMain.handle('network:selectInterface', async (_event, interfaceNames: string[]) => {
-      await updateAnalyzerInterfaces(interfaceNames)
-      return getInterfaceSelection()
+    const getInterfaces = (): ReturnType<typeof getInterfaceSelection> => getInterfaceSelection()
+
+    ipcMain.handle('network:getInterfaces', getInterfaces)
+    ipcMain.handle('network:selectInterface', async (_event, interfaceNames: unknown) => {
+      if (!Array.isArray(interfaceNames) || interfaceNames.length > 100) {
+        logger.error('Invalid interface names parameter', { interfaceNames })
+        throw new Error('Invalid interface names: must be an array with at most 100 elements')
+      }
+      await updateAnalyzerInterfaces(interfaceNames as string[])
+      return getInterfaces()
     })
     ipcMain.handle('network:startCapture', async () => {
       await startAnalyzer()
-      return getInterfaceSelection()
+      return getInterfaces()
     })
     ipcMain.handle('network:stopCapture', async () => {
       stopAnalyzer()
-      return getInterfaceSelection()
+      return getInterfaces()
     })
-    ipcMain.handle('network:queryDatabase', async (_event, sql: string) => {
-      return queryDatabase(sql)
+    ipcMain.handle('network:queryDatabase', async (_event, options: unknown) => {
+      if (!options || typeof options !== 'object' || !('table' in options)) {
+        logger.error('Invalid query options parameter', { options })
+        throw new Error('Invalid query options: must be an object with table property')
+      }
+      const validatedOptions = {
+        table: options.table as 'global_snapshots' | 'application_snapshots' | 'process_snapshots',
+        limit: 'limit' in options ? (options.limit as number) : undefined,
+        offset: 'offset' in options ? (options.offset as number) : undefined
+      }
+      return queryDatabase(validatedOptions)
     })
-    ipcMain.handle('set-value', (_event, key: string, value: string) => {
-      if (fs.existsSync(filePath)) {
-        fs.readFile(filePath, 'utf8', (err, data) => {
-          if (err) console.error('Error loading settings:', err)
-          else {
-            const values = JSON.parse(data)
-            values[key] = value
-            fs.writeFile(filePath, JSON.stringify(values), (err) => {
-              if (err) console.error('Error saving settings:', err)
-            })
+    ipcMain.handle('set-value', async (_event, key: string, value: string) => {
+      if (!validateSettingKey(key)) {
+        logger.error('Invalid setting key', { key })
+        throw new Error('Invalid setting key')
+      }
+
+      if (typeof value !== 'string' || value.length > 10000) {
+        logger.error('Invalid setting value', { key, valueLength: value?.length })
+        throw new Error('Invalid setting value')
+      }
+
+      try {
+        let values: Record<string, string> = {}
+        if (fs.existsSync(filePath)) {
+          const data = await fs.promises.readFile(filePath, 'utf8')
+          try {
+            const parsed = JSON.parse(data)
+            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+              values = parsed
+            } else {
+              logger.warn('Corrupted settings file, resetting', { filePath })
+            }
+          } catch (parseError) {
+            logger.warn('Failed to parse settings file, resetting', { filePath, error: parseError })
           }
-        })
-      } else {
-        const values = {}
+        }
+
         values[key] = value
-        fs.writeFile(filePath, JSON.stringify(values), (err) => {
-          if (err) console.error('Error saving settings:', err)
-        })
+
+        const dirPath = path.dirname(filePath)
+        await fs.promises.mkdir(dirPath, { recursive: true })
+
+        const tmpPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).substring(7)}`
+        await fs.promises.writeFile(tmpPath, JSON.stringify(values), 'utf8')
+        await fs.promises.rename(tmpPath, filePath)
+      } catch (error) {
+        logger.error('Error saving setting', { key, error })
+        throw error
       }
     })
 
     ipcMain.handle('get-value', async (_event, key: string) => {
+      if (!validateSettingKey(key)) {
+        logger.error('Invalid setting key', { key })
+        return null
+      }
+
       try {
         if (!fs.existsSync(filePath)) {
           return null
         }
         const data = await fs.promises.readFile(filePath, 'utf8')
         const values = JSON.parse(data)
-        return values[key]
+
+        if (typeof values !== 'object' || values === null || Array.isArray(values)) {
+          logger.warn('Corrupted settings file', { filePath })
+          return null
+        }
+
+        return values[key] ?? null
       } catch (err) {
-        console.error('Error loading settings:', err)
+        logger.error('Error loading settings', { key, error: err })
         return null
       }
     })
 
-    // System Monitor handlers
     ipcMain.handle('system:start', () => {
       logger.info('System monitor start requested by user')
       systemMonitor?.start()
@@ -138,16 +193,12 @@ export async function startApp(): Promise<void> {
   const mainWindow = createMainWindow()
   setMainWindow(mainWindow)
 
-  // Create shared ProcessTracker for Linux (used by both NetworkAnalyzer and LinuxSystemMonitor)
-  // This avoids duplicate polling and process caching
   if (process.platform === 'linux') {
     sharedProcessTracker = new ProcessTracker()
     setSharedProcessTracker(sharedProcessTracker)
     logger.info('Created shared ProcessTracker for Linux')
   }
 
-  // Initialize System Monitor (platform-specific)
-  // Pass shared ProcessTracker to Linux monitor
   systemMonitor = createSystemMonitor(mainWindow, sharedProcessTracker || undefined)
 
   if (!isSystemMonitoringSupported()) {
@@ -168,5 +219,6 @@ export function shutdownApp(): void {
   stopAnalyzer()
   systemMonitor?.stop()
   systemMonitor = null
+  closeDatabase()
   app.quit()
 }

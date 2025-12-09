@@ -1,5 +1,4 @@
 export class PayloadFormatter {
-  //Converts hex string back to Buffer for processing
   private static hexToBuffer(hex: string): Buffer {
     return Buffer.from(hex, 'hex')
   }

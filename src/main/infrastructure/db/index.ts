@@ -5,6 +5,7 @@ import * as schema from './schema'
 import { getDatabasePaths } from './utils'
 
 let db: BetterSQLite3Database<typeof schema> | null = null
+let sqliteClient: Database.Database | null = null
 
 export function getDatabase(): BetterSQLite3Database<typeof schema> {
   if (db) {
@@ -14,13 +15,25 @@ export function getDatabase(): BetterSQLite3Database<typeof schema> {
   const { dbPath } = getDatabasePaths()
   logger.info('Opening database', { dbPath })
 
-  const sqlite = new Database(dbPath)
-  sqlite.pragma('journal_mode = WAL')
+  sqliteClient = new Database(dbPath)
+  sqliteClient.pragma('journal_mode = WAL')
 
-  db = drizzle(sqlite, { schema })
+  db = drizzle(sqliteClient, { schema })
 
   return db
 }
 
+export function closeDatabase(): void {
+  if (sqliteClient) {
+    try {
+      sqliteClient.close()
+      logger.info('Database connection closed')
+    } catch (error) {
+      logger.error('Error closing database', error)
+    }
+    sqliteClient = null
+    db = null
+  }
+}
+
 export { schema }
-export * from './services/settings.service'

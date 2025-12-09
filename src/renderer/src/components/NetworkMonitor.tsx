@@ -17,7 +17,6 @@ function NetworkMonitor({
   advancedMode: boolean
   darkMode: boolean
 }): React.JSX.Element {
-  // State
   const [packets, setPackets] = useState<PacketMetadata[]>([])
   const [packetCount, setPacketCount] = useState(0)
   const [totalBytes, setTotalBytes] = useState(0)
@@ -48,7 +47,6 @@ function NetworkMonitor({
     })
   }, [location, registries])
 
-  // API: Initialize Interfaces
   useEffect(() => {
     const init = async (): Promise<void> => {
       try {
@@ -62,7 +60,6 @@ function NetworkMonitor({
     init()
   }, [])
 
-  // Actions
   const handleToggleCapture = async (): Promise<void> => {
     setIsUpdatingCapture(true)
     try {
@@ -98,15 +95,12 @@ function NetworkMonitor({
     init()
   }, [])
 
-  // API: Network Data Listener
   useEffect(() => {
     const handleData = (data: PacketMetadata): void => {
-      // Packets
       setPacketCount((p) => p + 1)
       setPackets((prev) => [data, ...prev].slice(0, maxPackets))
       setTotalBytes((p) => p + data.size)
 
-      // App Stats
       setAppStatsMap((prev) => {
         const appName = data.appName || 'UNKNOWN'
         const key = appName
@@ -135,18 +129,15 @@ function NetworkMonitor({
         }
       })
 
-      // Throughput
       const now = data.timestamp
       const samples = throughputSamplesRef.current
       samples.push({ timestamp: now, size: data.size })
 
-      // Cleanup old samples (30s window)
       const windowStart = now - 30000
       while (samples.length > 0 && samples[0].timestamp < windowStart) {
         samples.shift()
       }
 
-      // Calculate rate
       if (samples.length > 0) {
         const recentBytes = samples.reduce((acc, s) => acc + s.size, 0)
         const span = Math.max(1, (now - samples[0].timestamp) / 1000)
@@ -162,7 +153,6 @@ function NetworkMonitor({
     }
   }, [maxPackets])
 
-  // Throughput Decay Interval
   useEffect(() => {
     const interval = setInterval(() => {
       const samples = throughputSamplesRef.current

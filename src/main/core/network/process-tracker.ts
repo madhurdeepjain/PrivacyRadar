@@ -1,4 +1,4 @@
-import psList, { ProcessDescriptor } from 'ps-list'
+import psListModule, { ProcessDescriptor } from 'ps-list'
 import { PROCESS_POLL_INTERVAL_MS } from '@config/constants'
 import { logger } from '@infra/logging'
 import { ProcDetails, ProcessTree } from '@shared/interfaces/common'
@@ -13,24 +13,20 @@ export class ProcessTracker {
 
   async refreshProcesses(): Promise<void> {
     try {
-      type PsListFn = () => Promise<ProcessDescriptor[]>
+      const psListFn =
+        typeof psListModule === 'function'
+          ? psListModule
+          : (psListModule as { default: () => Promise<ProcessDescriptor[]> }).default
 
-      let psListFunction: PsListFn | undefined
-
-      if (typeof psList === 'function') {
-        psListFunction = psList as PsListFn
-      } else {
-        const candidate = (psList as unknown as { default?: unknown }).default
-        if (typeof candidate === 'function') {
-          psListFunction = candidate as PsListFn
-        }
-      }
-
-      if (!psListFunction) {
+      if (typeof psListFn !== 'function') {
+        logger.error('ps-list import failed', {
+          psListType: typeof psListModule,
+          hasDefault: psListModule && typeof psListModule === 'object' && 'default' in psListModule
+        })
         throw new Error('ps-list module did not export a valid function')
       }
 
-      const processes = await psListFunction()
+      const processes = await psListFn()
       this.procCache.clear()
 
       for (const process of processes) {

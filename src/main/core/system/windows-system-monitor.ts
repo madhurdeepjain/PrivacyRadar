@@ -20,7 +20,6 @@ interface HardwareUsage {
   startTime: Date
 }
 
-//ignored processes
 const SYSTEM_PROCESSES = new Set([
   'system',
   'registry',
