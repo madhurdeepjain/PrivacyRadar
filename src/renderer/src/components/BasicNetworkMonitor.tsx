@@ -1,11 +1,13 @@
 import * as React from 'react'
-import { Play, Pause, Zap } from 'lucide-react'
+import { Play, Pause, Zap, Sparkles } from 'lucide-react'
 import { Button } from './ui/button'
 import Visualization from './Visualization'
-import { InterfaceOption, ProcessRegistry } from '../types'
+import { InterfaceOption, ProcessRegistry, AppStats } from '../types'
 import GlobalMap from './GlobalMap'
 import { ProcessList } from './ProcessList'
 import { PacketMetadata } from 'src/preload/preload'
+import { useState, useMemo } from 'react'
+import { PrivacyAiPanel } from './AdvancedNetworkMonitor'
 
 interface BasicNetworkMonitorProps {
   colorAccessibility: boolean
@@ -17,6 +19,7 @@ interface BasicNetworkMonitorProps {
   isUpdatingCapture: boolean
   isCapturing: boolean
   interfaces: InterfaceOption[]
+  appStatsMap: Record<string, AppStats>
 }
 
 export function BasicNetworkMonitor({
@@ -28,8 +31,14 @@ export function BasicNetworkMonitor({
   handleToggleCapture,
   isUpdatingCapture,
   isCapturing,
-  interfaces
+  interfaces,
+  appStatsMap
 }: BasicNetworkMonitorProps): React.JSX.Element {
+  const [aiEnabled, setAiEnabled] = useState(false)
+  const appStats = useMemo((): AppStats[] => {
+    return Object.values(appStatsMap).sort((a, b) => b.packetCount - a.packetCount)
+  }, [appStatsMap])
+
   return (
     <div className="flex flex-col h-full space-y-4 p-6 overflow-hidden">
       {/* Header */}
@@ -42,6 +51,14 @@ export function BasicNetworkMonitor({
           <Button variant="outline" size="sm" onClick={handleAdvancedModeChange}>
             <Zap className="mr-2 h-4 w-4" />
             Advanced Mode
+          </Button>
+          <Button
+            variant={aiEnabled ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setAiEnabled((prev) => !prev)}
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
+            AI mode
           </Button>
           <Button
             onClick={handleToggleCapture}
@@ -64,8 +81,15 @@ export function BasicNetworkMonitor({
         </div>
       </div>
 
+      {/* Privacy AI Panel */}
+      {aiEnabled && (
+        <div className="shrink-0">
+          <PrivacyAiPanel packets={packets} apps={appStats} isCapturing={isCapturing} />
+        </div>
+      )}
+
       {/* Main Content Area */}
-      <div className="grid gap-4 md:grid-cols-7 flex-1 min-h-0">
+      <div className="grid gap-4 md:grid-cols-7 flex-1 min-h-0 overflow-auto">
         {/* Left: App Insights (4 cols) */}
         <div className="md:col-span-4 flex flex-col min-h-0 gap-4">
           <GlobalMap

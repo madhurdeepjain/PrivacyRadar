@@ -23,6 +23,7 @@ import {
 } from '@core/system/system-monitor-factory'
 import type { ISystemMonitor } from '@core/system/base-system-monitor'
 import { setSharedProcessTracker } from './analyzer-runner'
+import { setupIPCHandlers } from '../ipcHandlers'
 
 let ipcHandlersRegistered = false
 let systemMonitor: ISystemMonitor | null = null
@@ -116,6 +117,9 @@ export async function startApp(): Promise<void> {
     ipcMain.handle('system:is-supported', () => {
       return isSystemMonitoringSupported()
     })
+
+    // Privacy AI handlers
+    setupIPCHandlers()
 
     ipcHandlersRegistered = true
   }

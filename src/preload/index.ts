@@ -69,6 +69,9 @@ const api: API = {
   },
   getPublicIP: async (): Promise<string> => {
     return ipcRenderer.invoke('network:getPublicIP')
+  },
+  getPrivacySummary: async (snapshot: unknown): Promise<unknown> => {
+    return ipcRenderer.invoke('get-privacy-summary', snapshot)
   }
 }
 
