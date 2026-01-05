@@ -23,6 +23,7 @@ export interface API {
   setValue: (key: string, value: string) => Promise<void>
   getValue: (key: string) => Promise<string>
   getGeoLocation: (ip: string) => Promise<GeoLocationData>
+  getPrivacySummary: (snapshot: unknown) => Promise<unknown>
   getPublicIP: () => Promise<string>
 }
 

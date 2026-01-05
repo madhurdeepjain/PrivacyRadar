@@ -227,6 +227,7 @@ function NetworkMonitor({
               isUpdatingCapture={isUpdatingCapture}
               isCapturing={isCapturing}
               interfaces={interfaces}
+              appStatsMap={appStatsMap}
             />
           )}
         </motion.div>
